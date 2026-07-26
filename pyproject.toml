@@ -10,9 +10,14 @@ authors = [
 ]
 description = "Unified Runtime Primitive (URP) - Core implementation"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "websockets>=11.0",
+    "openhands-sdk[vertex]",
+    "openhands-tools",
 ]
 
 [project.optional-dependencies]

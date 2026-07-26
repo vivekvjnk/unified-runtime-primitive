@@ -175,7 +175,7 @@ class AbstractURPAgent(ABC):
 
                 # set last_process_result to None before getting a new message. 
                 while not self._state.outcome_acknowledged:
-                    logger.info(f"[{self.descriptor.agent_id}] Last task outcome {self._state.last_process_result} has not been acknowledged yet. Agent state: {self._state.status}. Waiting for acknowledgment before processing new messages.")
+                    logger.debug(f"[{self.descriptor.agent_id}] Last task outcome {self._state.last_process_result} has not been acknowledged yet. Agent state: {self._state.status}. Waiting for acknowledgment before processing new messages.")
                     await asyncio.sleep(0.3)  # Wait for acknowledgment before processing next message
 
                 # 0.5s timeout to check mailbox periodically. If no messages, loop continues.
