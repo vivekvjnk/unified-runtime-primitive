@@ -21,8 +21,8 @@ from openhands.sdk.conversation.state import (
 from openhands.tools.file_editor import FileEditorTool
 from openhands.tools.terminal import TerminalTool
 
-from .abstract_urp import AbstractURPAgent
-from .data_types import (
+from urp.abstract_urp import AbstractURPAgent
+from urp.data_types import (
     AgentDescriptor,
     MessageEnvelope,
     ProcessResult,
@@ -53,21 +53,52 @@ class SDKURPAgent(AbstractURPAgent):
         self.conversation = None
         self.workspace_path = None
         self.llm_messages = []
+        self._loop = None
 
     def _conversation_callback(self, event: Event):
+            # Log all events for debugging
+            try:
+                event_dict = event.model_dump() if hasattr(event, "model_dump") else str(event)
+                logger.info(f"[SDKURPAgent] Conversation Event: {event_dict}")
+            except Exception:
+                event_dict = str(event)
+                logger.info(f"[SDKURPAgent] Conversation Event: {event_dict}")
+            
             if isinstance(event, LLMConvertibleEvent):
                 self.llm_messages.append(event.to_llm_message())
+            
+            # Extract summary if available
+            summary = ""
+            event_source = str(event.source).lower() if hasattr(event, "source") else ""
+            if "agent" in event_source:
+                # Ignore ObservationEvent as per user request
+                if event.__class__.__name__ == "ObservationEvent":
+                    return
+
+                if hasattr(event, "summary") and event.summary:
+                    summary = event.summary
+                elif isinstance(event_dict, dict) and event_dict.get("summary"):
+                    summary = event_dict.get("summary")
+            
+            # Emit progress to URP bus
+            if self._emit_callback and self._loop:
+                # Create a bridge to emit the event
+                self._loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(self.emit(MessageEnvelope(
+                        type="AGENT_PROGRESS",
+                        payload={
+                            "event": event_dict, 
+                            "text": f"{summary if summary else event.__class__.__name__}"
+                        },
+                        sender=self.descriptor.agent_id
+                    )))
+                )
     
     def _on_initialize(self, context: Any) -> None:
         """
         Initializes the SDK agent.
-        Expected context.configuration:
-        {
-            "workspace_path": "/path/to/workspace",
-            "llm_config": { ... }, # Optional
-            "conversation_id": "..." # Optional
-        }
         """
+        self._loop = asyncio.get_running_loop()
         config = context.configuration
         self.workspace_path = config.get("workspace_path", os.path.join(os.getcwd(), "agent_workspace"))
         

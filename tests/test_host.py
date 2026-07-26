@@ -5,8 +5,8 @@ import os
 # Add the parent directory to sys.path
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from urp.host import URPHost
-from urp.sample_agent import EchoAgent
+from examples.host import URPHost
+from examples.sample_agent import EchoAgent
 from urp.data_types import AgentDescriptor, AgentContext, MessageEnvelope
 
 async def test_urp_host():

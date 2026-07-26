@@ -1,8 +1,8 @@
 import asyncio
 import logging
 from typing import Any, Callable, Dict, Optional, Type
-from .abstract_urp import AbstractURPAgent
-from .data_types import AgentDescriptor, AgentContext, MessageEnvelope, AgentStatus
+from urp.abstract_urp import AbstractURPAgent
+from urp.data_types import AgentDescriptor, AgentContext, MessageEnvelope, AgentStatus
 
 logger = logging.getLogger(__name__)
 

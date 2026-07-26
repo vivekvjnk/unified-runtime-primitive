@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any
-from .abstract_urp import AbstractURPAgent
-from .data_types import ProcessResult, LastTaskOutcome, MessageEnvelope, ProcessResultPayload
+from urp.abstract_urp import AbstractURPAgent
+from urp.data_types import ProcessResult, LastTaskOutcome, MessageEnvelope, ProcessResultPayload
 
 class EchoAgent(AbstractURPAgent):
     """
