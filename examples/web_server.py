@@ -13,6 +13,8 @@ from .sample_agent import EchoAgent
 from .sdk_agent import SDKURPAgent
 from .asm_agent.asm_agent import ASMURPAgent
 from .bdm_agent.bdm_agent import BDMURPAgent
+from .archy_agent.archy_agent import ArchyURPAgent
+from .ana_agent.ana_agent import ANAURPAgent
 from urp.data_types import AgentDescriptor, AgentContext, MessageEnvelope
 
 app = FastAPI(title="URP Independent Hosting Framework (URP-HF)")
@@ -58,6 +60,24 @@ def create_host(agent_type: str = "echo"):
             accepted_message_types=["PROCESS_BLOCK_DESIGN", "MESSAGE"]
         )
         host = URPHost(agent_class=BDMURPAgent, descriptor=descriptor)
+    elif agent_type == "archy":
+        descriptor = AgentDescriptor(
+            agent_id="vhl.archy.v1",
+            name="Archy Agent",
+            version="1.0",
+            capabilities=["TERMINAL", "FILE_EDITOR"],
+            accepted_message_types=["MESSAGE"]
+        )
+        host = URPHost(agent_class=ArchyURPAgent, descriptor=descriptor)
+    elif agent_type == "ana":
+        descriptor = AgentDescriptor(
+            agent_id="vhl.ana.v1",
+            name="ANA Agent",
+            version="1.0",
+            capabilities=["TERMINAL", "FILE_EDITOR"],
+            accepted_message_types=["MESSAGE"]
+        )
+        host = URPHost(agent_class=ANAURPAgent, descriptor=descriptor)
     return host
 
 # In-memory event log for the UI
@@ -93,6 +113,16 @@ async def initialize_agent(agent_type: str, workspace_path: str, conversation_id
         sys_prompt_kwargs = {
             "workspace_path": os.path.abspath(workspace_path),
             "context_description": "Architectural State Management"
+        }
+    elif agent_type == "archy":
+        sys_prompt_kwargs = {
+            "workspace_path": os.path.abspath(workspace_path),
+            "context_description": "Module Integration and SCUD Generation"
+        }
+    elif agent_type == "ana":
+        sys_prompt_kwargs = {
+            "workspace_path": os.path.abspath(workspace_path),
+            "context_description": "Analog Circuit Design and Refinement"
         }
 
     context = AgentContext(
@@ -155,27 +185,60 @@ async def get_conversation_history(workspace_path: str, conversation_id: str):
                 
                 # Check for User messages
                 if event.get("kind") == "MessageEvent" and event.get("source") == "user":
-                    # Some versions might have it in llm_message, others in content
                     content = event.get("content", [])
                     if not content and "llm_message" in event:
                         content = event.get("llm_message", {}).get("content", [])
                     
-                    for item in content:
-                        if isinstance(item, dict) and item.get("type") == "text":
-                            history.append({"role": "user", "text": item.get("text")})
-                        elif isinstance(item, str):
-                            history.append({"role": "user", "text": item})
+                    if content:
+                        for item in content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                history.append({"role": "user", "text": item.get("text")})
+                            elif isinstance(item, str):
+                                history.append({"role": "user", "text": item})
+                    elif "text" in event:
+                        history.append({"role": "user", "text": event.get("text")})
                 
+                # Check for Agent messages
+                elif event.get("kind") == "MessageEvent" and event.get("source") == "agent":
+                    # Check for normal content list
+                    content = event.get("content", [])
+                    if not content and "llm_message" in event:
+                        content = event.get("llm_message", {}).get("content", [])
+                        
+                    if content:
+                        for item in content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                history.append({"role": "agent", "text": item.get("text")})
+                            elif isinstance(item, str):
+                                history.append({"role": "agent", "text": item})
+                    elif "text" in event:
+                        # Fallback for some event formats
+                        history.append({"role": "agent", "text": event.get("text")})
+
+                # Check for Agent finish calls (CmdRunEvent with tool_name: finish)
+                elif event.get("kind") == "CmdRunEvent" and event.get("tool_name") == "finish":
+                    args = event.get("tool_params", {}) or event.get("arguments", {})
+                    finish_msg = args.get("message", "")
+                    if finish_msg:
+                        history.append({"role": "agent", "text": finish_msg})
+
                 # Check for Agent finish messages (ObservationEvent with tool_name: finish)
                 elif event.get("kind") == "ObservationEvent" and event.get("tool_name") == "finish":
                     observation = event.get("observation", {})
-                    # Handle both FinishObservation kind and general content
                     content = observation.get("content", [])
-                    for item in content:
-                        if isinstance(item, dict) and item.get("type") == "text":
-                            history.append({"role": "agent", "text": item.get("text")})
-                        elif isinstance(item, str):
-                            history.append({"role": "agent", "text": item})
+                    if not content and "message" in observation:
+                        # Sometimes finish result is just a message string
+                        history.append({"role": "agent", "text": observation.get("message")})
+                    elif not content and "content" in event:
+                         # Sometimes observation content is in the event itself
+                         content = event.get("content", [])
+                    
+                    if content:
+                        for item in content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                history.append({"role": "agent", "text": item.get("text")})
+                            elif isinstance(item, str):
+                                history.append({"role": "agent", "text": item})
         except Exception as e:
             print(f"Error reading event file {filename}: {e}")
             
@@ -441,11 +504,13 @@ async def get_index():
                         <h3>Agent Core</h3>
                         <div class="field-group">
                             <label>Agent Implementation</label>
-                            <select id="agentType">
+                            <select id="agentType" onchange="updateStatus()">
                                 <option value="echo">Echo Agent (Standard)</option>
                                 <option value="sdk">SDK Agent (OpenHands)</option>
                                 <option value="asm">ASM Agent (Architectural State)</option>
                                 <option value="bdm">BDM Agent (Block Design)</option>
+                                <option value="archy">Archy Agent (System Integration)</option>
+                                <option value="ana">ANA Agent (Analog Circuit Design)</option>
                             </select>
                         </div>
                         <div class="field-group">
@@ -577,7 +642,7 @@ async def get_index():
                         ackArea.style.display = (state.outcome_acknowledged === false) ? 'flex' : 'none';
 
                         const agentType = document.getElementById('agentType').value;
-                        const isComplex = (agentType === 'sdk' || agentType === 'asm' || agentType === 'bdm');
+                        const isComplex = (agentType === 'sdk' || agentType === 'asm' || agentType === 'bdm' || agentType === 'archy' || agentType === 'ana');
                         document.getElementById('conversationSection').style.display = isComplex ? 'block' : 'none';
                         
                         if (state.status !== 'OFFLINE' && isComplex) {
@@ -753,7 +818,6 @@ async def get_index():
                     addLog('Acknowledging task outcome...', 'event');
                     await fetch('/agent/acknowledge', { method: 'POST' });
                     updateStatus();
-                    await loadHistory();
                 }
 
                 // Keyboard support
