@@ -134,12 +134,19 @@ async def initialize_agent(agent_type: str, workspace_path: str, conversation_id
             "workspace_path": os.path.abspath(workspace_path),
             "context_description": "Analog Circuit Design and Refinement"
         }
+    elif agent_type == "layout_engineer":
+        sys_prompt_kwargs = {
+            "workspace_path": os.path.abspath(workspace_path),
+            "context_description": "PCB Layout Component Placement and Optimization"
+        }
 
     context = AgentContext(
         configuration={
+            "workspace_dir": os.path.abspath(workspace_path),
             "workspace_path": os.path.abspath(workspace_path),
             "conversation_id": conversation_id,
-            "system_prompt_kwargs": sys_prompt_kwargs
+            "system_prompt_kwargs": sys_prompt_kwargs,
+            "no_session": True,
         }
     )
     
@@ -518,9 +525,10 @@ async def get_index():
                                 <option value="echo">Echo Agent (Standard)</option>
                                 <option value="sdk">SDK Agent (OpenHands)</option>
                                 <option value="asm">ASM Agent (Architectural State)</option>
-                                <option value="bdm">BDM Agent (Block Design)</option>
+                                <option value="bdm">BDM Agent (Boundary Documentation Manage)</option>
                                 <option value="archy">Archy Agent (System Integration)</option>
                                 <option value="ana">ANA Agent (Analog Circuit Design)</option>
+                                <option value="layout_engineer">Layout Engineer Agent (PCB Placement)</option>
                             </select>
                         </div>
                         <div class="field-group">
@@ -652,7 +660,7 @@ async def get_index():
                         ackArea.style.display = (state.outcome_acknowledged === false) ? 'flex' : 'none';
 
                         const agentType = document.getElementById('agentType').value;
-                        const isComplex = (agentType === 'sdk' || agentType === 'asm' || agentType === 'bdm' || agentType === 'archy' || agentType === 'ana');
+                        const isComplex = (agentType === 'sdk' || agentType === 'asm' || agentType === 'bdm' || agentType === 'archy' || agentType === 'ana' || agentType === 'layout_engineer');
                         document.getElementById('conversationSection').style.display = isComplex ? 'block' : 'none';
                         
                         if (state.status !== 'OFFLINE' && isComplex) {
