@@ -15,6 +15,7 @@ from .asm_agent.asm_agent import ASMURPAgent
 from .bdm_agent.bdm_agent import BDMURPAgent
 from .archy_agent.archy_agent import ArchyURPAgent
 from .ana_agent.ana_agent import ANAURPAgent
+from .layout_engineer.layout_engineer_agent import LayoutEngineerURPAgent
 from urp.data_types import AgentDescriptor, AgentContext, MessageEnvelope
 
 app = FastAPI(title="URP Independent Hosting Framework (URP-HF)")
@@ -78,6 +79,15 @@ def create_host(agent_type: str = "echo"):
             accepted_message_types=["MESSAGE"]
         )
         host = URPHost(agent_class=ANAURPAgent, descriptor=descriptor)
+    elif agent_type == "layout_engineer":
+        descriptor = AgentDescriptor(
+            agent_id="vhl.layout_engineer.v1",
+            name="Layout Engineer Agent",
+            version="1.0",
+            capabilities=["pcb_placement", "layout_optimization", "netlist_analysis"],
+            accepted_message_types=["LAYOUT_PLACEMENT_TASK", "TASK", "MESSAGE"]
+        )
+        host = URPHost(agent_class=LayoutEngineerURPAgent, descriptor=descriptor)
     return host
 
 # In-memory event log for the UI

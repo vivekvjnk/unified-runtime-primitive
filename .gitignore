@@ -3,3 +3,4 @@ uv.lock
 **egg-info
 .venv
 .git
+.env
