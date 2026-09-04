@@ -36,7 +36,7 @@ logger = logging.getLogger("urp.bdm_agent")
 
 class BDMURPAgent(AbstractURPAgent):
     """
-    Block Design Manager (BDM) Agent implementation using openhands-agent-sdk.
+    Boundary Documentation Manage (BDM) Agent implementation using openhands-agent-sdk.
     """
 
     def __init__(self, descriptor: Optional[AgentDescriptor] = None):
