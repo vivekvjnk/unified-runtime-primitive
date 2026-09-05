@@ -26,7 +26,6 @@ from .data_types import (
     AgentDescriptor,
     MessageEnvelope,
     ProcessResult,
-    ProcessResultPayload,
     LastTaskOutcome,
     FailureCategory,
 )
@@ -171,5 +170,5 @@ class SDKURPAgent(AbstractURPAgent):
 
         return ProcessResult(
             outcome=process_outcome,
-            payload=ProcessResultPayload(text=response)
+            text=response
         )

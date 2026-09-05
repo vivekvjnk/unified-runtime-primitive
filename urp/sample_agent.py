@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any
 from .abstract_urp import AbstractURPAgent
-from .data_types import ProcessResult, LastTaskOutcome, MessageEnvelope, ProcessResultPayload
+from .data_types import ProcessResult, LastTaskOutcome, MessageEnvelope
 
 class EchoAgent(AbstractURPAgent):
     """
@@ -35,5 +35,5 @@ class EchoAgent(AbstractURPAgent):
         # Return completion result
         return ProcessResult(
             outcome=LastTaskOutcome.TASK_COMPLETED,
-            payload=ProcessResultPayload(text=f"Echo: {text}")
+            text=f"Echo: {text}"
         )
