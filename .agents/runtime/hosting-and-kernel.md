@@ -35,9 +35,22 @@ This document describes the host runtime kernel (`urp.host.URPHost`), the indepe
 
 ---
 
-## 2. Web Server & Console Architecture (`urp.web_server`)
+## 2. Web Server & Console Architecture (`urp.web`)
 
-`urp.web_server` provides a standalone FastAPI and WebSocket service for testing, inspecting, and operating URP agents interactively.
+`urp.web` provides a modular FastAPI and WebSocket service for testing, inspecting, and operating URP agents interactively.
+
+### Module Structure
+```
+urp/web/
+├── __init__.py           # Package exports (app, create_app, AgentHostingService)
+├── app.py                # FastAPI factory and lifespan context manager
+├── routes.py             # HTTP and WebSocket route handlers
+├── schemas.py            # Pydantic request models
+├── agent_service.py      # Host lifecycle and registry coordination service
+├── workspace_service.py  # Session persistence and directory browser helpers
+└── templates/
+    └── index.html        # Interactive dark-theme dashboard with marked.js
+```
 
 ### Endpoints
 

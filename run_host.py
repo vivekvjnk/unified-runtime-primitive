@@ -10,4 +10,4 @@ if __name__ == "__main__":
     print("Access the Web Console at http://localhost:8000")
     
     # Run the FastAPI app using uvicorn
-    uvicorn.run("urp.web_server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("urp.web:app", host="0.0.0.0", port=8000, reload=True)
