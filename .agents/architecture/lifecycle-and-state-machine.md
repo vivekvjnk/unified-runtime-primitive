@@ -1,12 +1,12 @@
 # Architecture: Lifecycle & State Machine
 
-This document details the lifecycle state machine, execution loop, condition verification pipeline, and outcome acknowledgment model implemented in `urp.abstract_urp` (`AbstractURPAgent`).
+This document details the lifecycle state machine, execution loop, condition verification pipeline, and non-blocking state transitions implemented in `urp.core.abstract_urp` (`AbstractURPAgent`).
 
 ---
 
 ## 1. Lifecycle State Machine
 
-Every URP agent is governed by an explicit finite state machine (`AgentStatus` defined in `urp.data_types`):
+Every URP agent is governed by an explicit finite state machine (`AgentStatus` defined in `urp.core.data_types`):
 
 ```
                         ┌──────────────────┐
@@ -124,7 +124,7 @@ URP incorporates deterministic contract verification around every task execution
 
 ## 4. Failure Categorization
 
-All task failures are categorized using `FailureCategory` (`urp.data_types`):
+All task failures are categorized using `FailureCategory` (`urp.core.data_types`):
 
 | Category | Trigger / Cause |
 |---|---|

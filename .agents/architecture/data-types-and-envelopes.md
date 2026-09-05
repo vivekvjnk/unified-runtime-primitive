@@ -1,6 +1,6 @@
 # Architecture: Data Types & Envelopes
 
-This document details the core data models, serialization contracts, and envelope standards defined in `urp.data_types`.
+This document details the core data models, serialization contracts, and envelope standards defined in `urp.core.data_types`.
 
 ---
 

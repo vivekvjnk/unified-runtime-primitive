@@ -200,7 +200,7 @@ Every `AbstractURPAgent` adheres to a verified execution lifecycle with built-in
 
 ## 5. Registry & Semantic Identity Layer
 
-To decouple agent instantiation from orchestration control flow, URP provides a registry abstraction (`urp.agent_key` and `urp.agent_registry`):
+To decouple agent instantiation from orchestration control flow, URP provides a registry abstraction (`urp.core.agent_key` and `urp.core.agent_registry`):
 
 ```
        ┌────────────────────────────────────────┐
@@ -300,13 +300,13 @@ class SampleReActAgent(AbstractURPAgent):
 
         return ProcessResult(
             outcome=LastTaskOutcome.TASK_COMPLETED,
-            payload=ProcessResultPayload(text=response_text)
+            text=response_text
         )
 
     async def _check_postconditions(self, message: MessageEnvelope, result: ProcessResult) -> tuple[bool, str]:
         """Validate output artifacts or assertions before committing the outcome."""
-        if result.outcome == LastTaskOutcome.TASK_COMPLETED and not result.payload:
-            return False, "Completed task must contain a valid result payload."
+        if result.outcome == LastTaskOutcome.TASK_COMPLETED and not result.text:
+            return False, "Completed task must contain a valid result text."
         return True, "Postconditions satisfied."
 ```
 
@@ -316,8 +316,7 @@ class SampleReActAgent(AbstractURPAgent):
 
 ```python
 import asyncio
-from urp.host import URPHost
-from urp.data_types import AgentDescriptor, AgentContext
+from urp.core import URPHost, AgentDescriptor, AgentContext
 
 async def main():
     descriptor = AgentDescriptor(
@@ -361,7 +360,7 @@ if __name__ == "__main__":
 
 ## 7. OpenHands SDK Integration (`SDKURPAgent`)
 
-`urp-core` includes a full bridge for the **OpenHands SDK** (`urp.sdk_agent.SDKURPAgent`), illustrating how heavy LLM agent engines with terminal tools and file editors run transparently below the URP boundary:
+`urp-core` includes a full bridge for the **OpenHands SDK** (`urp.harnesses.openhands.SDKURPAgent`), illustrating how heavy LLM agent engines with terminal tools and file editors run transparently below the URP boundary:
 
 * Encapsulates `openhands.sdk.Conversation`, `openhands.sdk.Agent`, and `openhands.tools` (such as `FileEditorTool` and `TerminalTool`).
 * Maps SDK conversation lifecycle states (`FINISHED`, `PAUSED`, `STUCK`, `ERROR`) directly to canonical URP outcomes (`TASK_COMPLETED`, `WAITING_FOR_USER_INPUT`, `TASK_FAILED`).

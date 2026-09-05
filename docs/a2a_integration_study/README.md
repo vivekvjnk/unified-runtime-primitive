@@ -12,7 +12,7 @@
 | **Phase 2** | [`02_a2a_feasibility_and_runtime_agency.md`](02_a2a_feasibility_and_runtime_agency.md) | **Completed** | Analysis of A2A feasibility, protocol vs. runtime agency decoupling, Layer 3 shared-disk IPC, and Software Laboratory multi-stage workflows. |
 | **Phase 3** | [`03_native_data_structures_and_a2a_alignment.md`](03_native_data_structures_and_a2a_alignment.md) | **Completed** | Deep review of real-world agents (Archy, ANA, Librarian) and proposed native data structure simplifications for A2A alignment. |
 | **Phase 4** | [`04_vhl_agents_migration_guide.md`](04_vhl_agents_migration_guide.md) | **Completed** | Step-by-step migration recipes and diffs for upgrading Archy, ANA, and Librarian agents under VHL-System. |
-| **Phase 5** | `05_...` | *Upcoming* | Synthesis & Design specification of the URP-A2A interaction layer and adapter mechanics. |
+| **Phase 5** | [`05_a2a_implementation_roadmap.md`](05_a2a_implementation_roadmap.md) | **Active / Current** | Phased engineering implementation roadmap and technical specification for the `urp.a2a` adapter layer. |
 
 ---
 

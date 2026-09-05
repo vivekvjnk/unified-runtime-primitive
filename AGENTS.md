@@ -111,7 +111,7 @@ pytest
 ```
 
 ### 4.3 Standard Pattern: Writing a Custom Agent
-1. Inherit from `AbstractURPAgent` in `urp.abstract_urp`.
+1. Inherit from `AbstractURPAgent` in `urp.core`.
 2. Implement `_on_initialize(context)` to configure dependencies and workspace directories.
 3. Implement `async def process(message: MessageEnvelope) -> ProcessResult` to execute reasoning and tool workflows.
 4. Optionally implement `_check_preconditions` and `_check_postconditions` for contract verification.
@@ -125,5 +125,6 @@ For complete code examples, see [`.agents/guides/authoring-agents.md`](.agents/g
 When working on this repository, autonomous agents must adhere to the following rules:
 
 1. **Preserve ABI Boundaries:** Do not expose `AbstractURPAgent` internals directly to external callers; interact through `MessageEnvelope` or `AgentHandle`.
-2. **Maintain Pydantic Schemas:** Ensure all modifications to envelopes or state models in `urp/data_types.py` maintain backward compatibility and JSON serializability.
-3. **Update Progressive Documentation:** Whenever state machine semantics, registry APIs, or kernel bindings change, update the corresponding deep-dive documentation in `.agents/`.
+2. **Maintain Pydantic Schemas:** Ensure all modifications to envelopes or state models in `urp/core/data_types.py` maintain backward compatibility and JSON serializability.
+3. **Respect Sub-package Separation:** Pure URP abstractions belong in `urp/core/`, engine integrations belong in `urp/harnesses/`, reference agents in `urp/agents/`, and web server code in `urp/web/`.
+4. **Update Progressive Documentation:** Whenever state machine semantics, registry APIs, or kernel bindings change, update the corresponding deep-dive documentation in `.agents/`.

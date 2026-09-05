@@ -64,12 +64,12 @@ class TextProcessingAgent(AbstractURPAgent):
         # 3. Return structured outcome
         return ProcessResult(
             outcome=LastTaskOutcome.TASK_COMPLETED,
-            payload=ProcessResultPayload(text=f"Processed: {transformed}")
+            text=f"Processed: {transformed}"
         )
 
     async def _check_postconditions(self, message: MessageEnvelope, result: ProcessResult) -> tuple[bool, str]:
-        # Assert that result payload is populated
-        if not result.payload or not result.payload.text:
+        # Assert that result text is populated
+        if not result.text:
             return False, "Output text cannot be empty."
         return True, "Postconditions verified."
 ```
@@ -78,12 +78,13 @@ class TextProcessingAgent(AbstractURPAgent):
 
 ## 3. Integrating Complex Engines (OpenHands SDK Example)
 
-For full LLM agent loops with terminal and file tools, wrap the engine inside `process()` (as seen in `urp.sdk_agent.SDKURPAgent`):
+For full LLM agent loops with terminal and file tools, wrap the engine inside `process()` (as seen in `urp.harnesses.openhands.SDKURPAgent`):
 
 ```python
 from openhands.sdk import LLM, Agent, Conversation, Message, TextContent, Tool
 from openhands.tools.file_editor import FileEditorTool
 from openhands.tools.terminal import TerminalTool
+from urp.core import AbstractURPAgent, AgentContext, MessageEnvelope, ProcessResult, LastTaskOutcome
 
 class MyCustomSDKAgent(AbstractURPAgent):
     def _on_initialize(self, context: AgentContext) -> None:
@@ -104,6 +105,6 @@ class MyCustomSDKAgent(AbstractURPAgent):
         
         return ProcessResult(
             outcome=LastTaskOutcome.TASK_COMPLETED,
-            payload=ProcessResultPayload(text="Execution finished.")
+            text="Execution finished."
         )
 ```

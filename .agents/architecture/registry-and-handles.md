@@ -51,7 +51,7 @@ In complex multi-agent architectures (such as AOSM — Agent Orchestration State
 Provides a human-meaningful semantic identity independent of internal ephemeral UUIDs:
 
 ```python
-from urp.agent_key import AgentKey
+from urp.core import AgentKey
 
 key = AgentKey(agent_type="archy", module_name="bms-monitor-module")
 print(str(key))  # "archy:bms-monitor-module"
@@ -86,8 +86,8 @@ print(handle.mailbox_size) # 0
 Supports both global module-level registry functions and scoped `AgentRegistry` instances:
 
 ```python
-from urp.agent_registry import AgentRegistry, register_agent, create_agent
-from urp.data_types import AgentDescriptor
+from urp.core import AgentRegistry, register_agent, create_agent
+from urp.core import AgentDescriptor
 
 descriptor = AgentDescriptor(
     agent_id="vhl.echo.v1",
