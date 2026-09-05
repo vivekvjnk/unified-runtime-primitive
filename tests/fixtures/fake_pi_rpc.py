@@ -162,6 +162,32 @@ def main():
                     {"type": "agent_end"},
                     {"type": "agent_settled"},
                 ]
+            elif "delegate_subtask_test" in msg_text:
+                events = [
+                    {"type": "agent_start"},
+                    {"type": "turn_start"},
+                    {
+                        "type": "message_update",
+                        "assistantMessageEvent": {
+                            "type": "text_delta",
+                            "contentIndex": 0,
+                            "delta": "Spawning subtask via delegate... "
+                        }
+                    },
+                    {
+                        "type": "tool_execution_start",
+                        "toolName": "delegate",
+                        "args": {"tasks": [{"agent": "scout", "prompt": "scan repo"}]}
+                    },
+                    {
+                        "type": "tool_execution_end",
+                        "toolName": "delegate",
+                        "result": "Subtask scout completed successfully"
+                    },
+                    {"type": "turn_end"},
+                    {"type": "agent_end"},
+                    {"type": "agent_settled"},
+                ]
             else:
                 events = [
                     {"type": "agent_start"},

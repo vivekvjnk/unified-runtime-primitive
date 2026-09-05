@@ -285,3 +285,63 @@ async def test_pi_urp_agent_timeout_handling(tmp_path):
     assert "timed out after 0.5 seconds" in result.payload.text
 
     await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pi_urp_agent_streaming_and_delegation(tmp_path):
+    """Test 8: Verify streaming text deltas and sub-task delegation events."""
+    context = AgentContext(
+        configuration={
+            "workspace_dir": str(tmp_path),
+            "no_session": True,
+            "executable_path": FAKE_PI_SCRIPT,
+        }
+    )
+
+    agent = DummyPiURPAgent()
+    emitted = []
+    task_done_event = asyncio.Event()
+
+    def emit_cb(msg: MessageEnvelope):
+        emitted.append(msg)
+        if msg.type == "TASK_COMPLETED":
+            task_done_event.set()
+
+    agent.initialize(context, emit_cb)
+    await agent.start()
+
+    # Dispatch message with streaming=True and delegation trigger
+    msg = MessageEnvelope(
+        type="MESSAGE",
+        payload={"text": "delegate_subtask_test"},
+        sender="a2a_orchestrator",
+        context_id="ctx-delegation-1",
+        task_id="task-delegation-1",
+        streaming=True,
+    )
+
+    await agent.send(msg)
+    await asyncio.wait_for(task_done_event.wait(), timeout=10.0)
+
+    # 1. Assert streaming text delta was emitted
+    text_deltas = [e for e in emitted if e.type == "TEXT_DELTA"]
+    assert len(text_deltas) >= 1
+    assert "Spawning subtask via delegate" in text_deltas[0].payload["delta"]
+    assert text_deltas[0].task_id == "task-delegation-1"
+    assert text_deltas[0].context_id == "ctx-delegation-1"
+
+    # 2. Assert sub-task delegation lifecycle events were intercepted
+    subtask_starts = [e for e in emitted if e.type == "TASK_SUBTASK_STARTED"]
+    assert len(subtask_starts) == 1
+    assert subtask_starts[0].payload["toolName"] == "delegate"
+    assert subtask_starts[0].task_id == "task-delegation-1"
+
+    subtask_ends = [e for e in emitted if e.type == "TASK_SUBTASK_COMPLETED"]
+    assert len(subtask_ends) == 1
+    assert subtask_ends[0].payload["toolName"] == "delegate"
+
+    # 3. Assert terminal completion
+    completions = [e for e in emitted if e.type == "TASK_COMPLETED"]
+    assert len(completions) == 1
+
+    await agent.shutdown()

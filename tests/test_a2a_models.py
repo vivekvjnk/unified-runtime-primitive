@@ -112,6 +112,36 @@ def test_translator_stream_response_events():
     assert stream_resp_comp.status_update.status.state == TaskState.TASK_STATE_COMPLETED
     assert "Done!" in stream_resp_comp.status_update.status.message.get_text()
 
+    # 3. Streaming text delta event
+    delta_env = MessageEnvelope(
+        type="TEXT_DELTA",
+        payload={"delta": "generating code..."},
+        sender="agent_kernel",
+        context_id="session-1",
+        task_id="task-1",
+        streaming=True,
+    )
+    stream_resp_delta = A2ATranslator.envelope_to_stream_response(delta_env)
+    assert stream_resp_delta is not None
+    assert stream_resp_delta.status_update is not None
+    assert stream_resp_delta.status_update.status.state == TaskState.TASK_STATE_WORKING
+    assert "generating code..." in stream_resp_delta.status_update.status.message.get_text()
+    assert stream_resp_delta.status_update.metadata["is_chunk"] is True
+
+    # 4. Sub-task delegation event
+    subtask_env = MessageEnvelope(
+        type="TASK_SUBTASK_STARTED",
+        payload={"toolName": "delegate", "tasks": [{"agent": "reviewer"}]},
+        sender="agent_kernel",
+        context_id="session-1",
+        task_id="task-1",
+    )
+    stream_resp_sub = A2ATranslator.envelope_to_stream_response(subtask_env)
+    assert stream_resp_sub is not None
+    assert stream_resp_sub.status_update is not None
+    assert stream_resp_sub.status_update.status.state == TaskState.TASK_STATE_WORKING
+    assert stream_resp_sub.status_update.metadata["toolName"] == "delegate"
+
 
 def test_translator_process_result_to_task():
     res = ProcessResult(

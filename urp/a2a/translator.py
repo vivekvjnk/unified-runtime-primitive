@@ -177,7 +177,52 @@ class A2ATranslator:
             )
             return StreamResponse(status_update=status_update)
 
-        # 2. Intermediate Progress & Tool Execution
+        # 2. In-flight Streaming Text Deltas
+        elif envelope.type in ["TEXT_DELTA", "CHUNK"]:
+            delta_text = ""
+            if isinstance(envelope.payload, dict):
+                delta_text = envelope.payload.get("delta") or envelope.payload.get("text") or ""
+            elif isinstance(envelope.payload, str):
+                delta_text = envelope.payload
+
+            msg_delta = A2AMessage.from_text(
+                text=delta_text,
+                role=Role.ROLE_AGENT,
+                context_id=context_id,
+                task_id=task_id,
+            )
+            status_update = TaskStatusUpdateEvent(
+                task_id=task_id,
+                context_id=context_id,
+                status=TaskStatus(
+                    state=TaskState.TASK_STATE_WORKING,
+                    message=msg_delta,
+                    timestamp=datetime.datetime.now(datetime.timezone.utc),
+                ),
+                metadata={"is_chunk": True},
+            )
+            return StreamResponse(status_update=status_update)
+
+        # 3. Sub-task Delegation Events
+        elif envelope.type in ["TASK_SUBTASK_STARTED", "TASK_SUBTASK_COMPLETED"]:
+            subtask_meta: Dict[str, Any] = {"event_type": envelope.type}
+            if isinstance(envelope.payload, dict):
+                subtask_meta.update(envelope.payload)
+            elif envelope.payload:
+                subtask_meta["payload"] = envelope.payload
+
+            status_update = TaskStatusUpdateEvent(
+                task_id=task_id,
+                context_id=context_id,
+                status=TaskStatus(
+                    state=TaskState.TASK_STATE_WORKING,
+                    timestamp=datetime.datetime.now(datetime.timezone.utc),
+                ),
+                metadata=subtask_meta,
+            )
+            return StreamResponse(status_update=status_update)
+
+        # 4. Intermediate Progress & Tool Execution
         elif envelope.type in ["AGENT_TOOL_START", "AGENT_TOOL_END", "AGENT_PROGRESS_UPDATE", "TASK_PROGRESS"]:
             log_meta: Dict[str, Any] = {"event_type": envelope.type}
             if isinstance(envelope.payload, dict):

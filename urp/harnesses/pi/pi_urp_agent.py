@@ -101,8 +101,17 @@ class PiURPAgent(AbstractURPAgent):
 
     async def _forward_telemetry_event(self, rpc_evt: RpcEvent) -> None:
         """Maps Pi RPC events to URP telemetry envelopes and emits them."""
-        # Suppress noisy raw streaming chunks (text_delta, text_start, text_end)
+        # Handle streaming text deltas if caller requested streaming
         if rpc_evt.type == "message_update":
+            if self.is_streaming:
+                delta = rpc_evt.data.get("delta")
+                if not delta:
+                    delta = rpc_evt.data.get("assistantMessageEvent", {}).get("delta")
+                if not delta:
+                    delta = rpc_evt.data.get("assistant_message_event", {}).get("delta")
+
+                if delta:
+                    await self.emit_chunk(delta, event_type="TEXT_DELTA")
             return
 
         msg_type_map = {
@@ -113,6 +122,27 @@ class PiURPAgent(AbstractURPAgent):
             "error": "AGENT_ERROR_LOG",
         }
 
+        # Check for sub-task delegation via the 'delegate' tool
+        if rpc_evt.type == "tool_execution_start" and rpc_evt.data.get("toolName") == "delegate":
+            # Emit first-class subtask event
+            await self.emit(MessageEnvelope(
+                type="TASK_SUBTASK_STARTED",
+                payload=rpc_evt.data,
+                sender=self.descriptor.agent_id,
+                context_id=self._current_message.context_id if self._current_message else None,
+                task_id=self._current_message.task_id if self._current_message else None,
+            ))
+
+        elif rpc_evt.type == "tool_execution_end" and rpc_evt.data.get("toolName") == "delegate":
+            # Emit subtask finished event
+            await self.emit(MessageEnvelope(
+                type="TASK_SUBTASK_COMPLETED",
+                payload=rpc_evt.data,
+                sender=self.descriptor.agent_id,
+                context_id=self._current_message.context_id if self._current_message else None,
+                task_id=self._current_message.task_id if self._current_message else None,
+            ))
+
         urp_event_type = msg_type_map.get(rpc_evt.type)
         if urp_event_type:
             envelope = MessageEnvelope(
@@ -120,6 +150,8 @@ class PiURPAgent(AbstractURPAgent):
                 payload=rpc_evt.data,
                 sender=self.descriptor.agent_id,
                 receiver="SUPERVISOR",
+                context_id=self._current_message.context_id if self._current_message else None,
+                task_id=self._current_message.task_id if self._current_message else None,
             )
             await self.emit(envelope)
 

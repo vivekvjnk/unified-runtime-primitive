@@ -98,6 +98,7 @@ class MessageEnvelope(BaseModel):
     receiver: str = "HIL"
     context_id: Optional[str] = None       # Multi-turn conversational session anchor
     task_id: Optional[str] = None          # Isolated unit-of-work task anchor
+    streaming: bool = False                # When True, requests progressive chunk / token streaming
     message_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     correlation_id: Optional[str] = None   # Causality / tracing ID
     metadata: Dict[str, Any] = Field(default_factory=dict)

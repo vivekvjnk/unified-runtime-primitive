@@ -59,6 +59,7 @@ class AbstractURPAgent(ABC):
         self._emit_callback: Optional[Callable[['MessageEnvelope'], None]] = None
         self._shutdown_event = asyncio.Event()
         self._task: Optional[asyncio.Task] = None
+        self._current_message: Optional['MessageEnvelope'] = None
         
         logger.info(f"[{self.descriptor.agent_id}] AbstractURPAgent instantiated. Session ID: {self._state.session_id}")
 
@@ -137,6 +138,48 @@ class AbstractURPAgent(ABC):
         else:
             logger.warning(f"[{self.descriptor.agent_id}] Event emitted but no callback is bound. Event Type: {event.type}")
 
+    @property
+    def is_streaming(self) -> bool:
+        """Returns True if the current active message envelope requested streaming."""
+        return bool(self._current_message and self._current_message.streaming)
+
+    async def emit_chunk(
+        self,
+        chunk: Any,
+        event_type: str = "TEXT_DELTA",
+        task_id: Optional[str] = None,
+        context_id: Optional[str] = None,
+    ) -> None:
+        """
+        Emits an in-flight streaming chunk to the runtime bus ONLY IF streaming is requested
+        on the active message envelope.
+        """
+        if not self.is_streaming:
+            return
+
+        active_msg = self._current_message
+        tid = task_id or (active_msg.task_id if active_msg else None)
+        cid = context_id or (active_msg.context_id if active_msg else None)
+        corr_id = active_msg.correlation_id if active_msg else None
+
+        payload: Any
+        if isinstance(chunk, str):
+            payload = {"text": chunk, "delta": chunk}
+        elif isinstance(chunk, dict):
+            payload = chunk
+        else:
+            payload = {"data": chunk}
+
+        chunk_env = MessageEnvelope(
+            type=event_type,
+            payload=payload,
+            sender=self.descriptor.agent_id,
+            context_id=cid,
+            task_id=tid,
+            correlation_id=corr_id,
+        )
+        await self.emit(chunk_env)
+
     async def shutdown(self) -> None:
         """Graceful termination."""
         logger.info(f"[{self.descriptor.agent_id}] Triggering graceful shutdown...")
@@ -190,6 +233,7 @@ class AbstractURPAgent(ABC):
                     
                     # 2. PROCESSING
                     self._state.status = AgentStatus.PROCESSING
+                    self._current_message = message
                     logger.info(f"[{self.descriptor.agent_id}] Preconditions passed. Status changed to: {self._state.status}")
                     
                     # Capture the return value from the implementation
@@ -264,6 +308,7 @@ class AbstractURPAgent(ABC):
                     ))
                 finally:
                     logger.debug(f"[{self.descriptor.agent_id}] Marking mailbox task done for Msg ID: {message.message_id}")
+                    self._current_message = None
                     self.mailbox.task_done()
                     
             except asyncio.TimeoutError:
