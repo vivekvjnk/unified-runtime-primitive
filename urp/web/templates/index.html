@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>URP-HF | Unified Runtime Primitive Console</title>
+        <title>URP-HF | A2A Protocol Web Client</title>
         <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
         <style>
             :root {
@@ -213,6 +213,13 @@
                 border-radius: 4px;
                 font-size: 0.75rem;
             }
+            .subtask-badge {
+                background: rgba(16, 185, 129, 0.2);
+                color: var(--accent);
+                padding: 0.1rem 0.4rem;
+                border-radius: 4px;
+                font-size: 0.75rem;
+            }
             .tool-call-content {
                 padding: 0.5rem 0.75rem;
                 border-top: 1px solid var(--border);
@@ -282,21 +289,21 @@
         <header>
             <div style="display:flex; align-items:center;">
                 <h1>URP-HF</h1>
-                <span class="subtitle">Unified Runtime Primitive Independent Host</span>
+                <span class="subtitle">A2A Protocol Reference Web Client</span>
             </div>
             <div id="activeConvoInfo" style="display:none; font-size: 0.85rem; color: var(--text-dim);">
-                Session: <span id="activeConvId" style="color: var(--primary); font-family: monospace;"></span>
+                A2A Context: <span id="activeConvId" style="color: var(--primary); font-family: monospace;"></span>
             </div>
         </header>
 
         <main>
             <div id="sidebar">
                 <div class="config-section">
-                    <h3>Agent Registry</h3>
+                    <h3>A2A Agent Card</h3>
                     <div class="field-group">
-                        <label>Agent Type</label>
+                        <label>Active Agent</label>
                         <select id="agentType" onchange="onAgentTypeChanged()">
-                            <option value="echo">Loading agent types...</option>
+                            <option value="">Discovering Agent Card...</option>
                         </select>
                         <span id="agentDescription" style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem;"></span>
                     </div>
@@ -310,9 +317,9 @@
                 </div>
 
                 <div id="conversationSection" class="config-section" style="display: none;">
-                    <h3>Session & History</h3>
+                    <h3>Session Context</h3>
                     <div class="field-group">
-                        <label>Resume Conversation</label>
+                        <label>Resume Session</label>
                         <select id="resumeConversation" onchange="loadHistory()">
                             <option value="">-- New Session --</option>
                         </select>
@@ -337,18 +344,18 @@
                 <div id="status-bar">
                     <div class="status-badge">
                         <div id="statusDot" class="dot"></div>
-                        <span id="statusText">System Initializing</span>
+                        <span id="statusText">A2A Ready</span>
                         <span id="activeAgentBadge" style="margin-left: 0.75rem; padding: 0.2rem 0.5rem; background: var(--border); border-radius: 4px; font-size: 0.75rem; color: var(--primary); display: none;"></span>
                     </div>
-                    <div id="mailboxInfo" style="font-size: 0.85rem; color: var(--text-dim);">Mailbox: 0</div>
+                    <div id="protocolInfo" style="font-size: 0.85rem; color: var(--text-dim); font-family: monospace;">A2A v1.0 | HTTP+JSON / SSE</div>
                 </div>
 
                 <div id="console"></div>
 
                 <div class="input-area">
                     <div class="input-container">
-                        <textarea id="messageInput" placeholder="Enter message or prompt... (Ctrl+Enter to dispatch)"></textarea>
-                        <button onclick="sendMessage()" style="padding: 0 1.25rem;">Send</button>
+                        <textarea id="messageInput" placeholder="Enter message or prompt... (Ctrl+Enter to dispatch via A2A SSE)"></textarea>
+                        <button id="sendBtn" onclick="sendMessageA2A()" style="padding: 0 1.25rem;">Send</button>
                     </div>
                 </div>
             </div>
@@ -370,8 +377,11 @@
             const consoleDiv = document.getElementById('console');
             const statusText = document.getElementById('statusText');
             const statusDot = document.getElementById('statusDot');
-            const mailboxInfo = document.getElementById('mailboxInfo');
+            const activeAgentBadge = document.getElementById('activeAgentBadge');
             let registeredAgents = [];
+            let currentContextId = 'session-' + Math.random().toString(36).substring(2, 10);
+            let activeStreamCard = null;
+            let currentStreamText = '';
 
             function addLog(msg, type='event') {
                 const div = document.createElement('div');
@@ -394,16 +404,51 @@
                 
                 consoleDiv.appendChild(div);
                 consoleDiv.scrollTop = consoleDiv.scrollHeight;
+                return div;
             }
 
-            function addToolCallLog(toolName, argsStr, resultStr) {
+            function getOrCreateStreamingAgentCard() {
+                if (!activeStreamCard) {
+                    activeStreamCard = addLog('', 'agent-msg');
+                    currentStreamText = '';
+                }
+                return activeStreamCard;
+            }
+
+            function appendStreamingDelta(delta) {
+                const card = getOrCreateStreamingAgentCard();
+                currentStreamText += delta;
+                const body = card.querySelector('.markdown-body');
+                if (body) {
+                    body.innerHTML = marked.parse(currentStreamText);
+                }
+                consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            }
+
+            function finalizeStreamingCard(fullText) {
+                if (fullText) {
+                    currentStreamText = fullText;
+                }
+                if (activeStreamCard) {
+                    const body = activeStreamCard.querySelector('.markdown-body');
+                    if (body) {
+                        body.innerHTML = marked.parse(currentStreamText);
+                    }
+                } else if (fullText) {
+                    addLog(fullText, 'agent-msg');
+                }
+                activeStreamCard = null;
+                currentStreamText = '';
+            }
+
+            function addToolCallLog(toolName, argsStr, resultStr, isSubtask=false) {
                 const details = document.createElement('details');
                 details.className = 'tool-call-box';
 
                 const summary = document.createElement('summary');
                 const badge = document.createElement('span');
-                badge.className = 'tool-call-badge';
-                badge.textContent = `tool: ${toolName}`;
+                badge.className = isSubtask ? 'subtask-badge' : 'tool-call-badge';
+                badge.textContent = isSubtask ? `subtask: ${toolName}` : `tool: ${toolName}`;
                 
                 let paramPreview = '';
                 if (typeof argsStr === 'object') {
@@ -424,18 +469,32 @@
                 let formattedContent = `Arguments:\n${typeof argsStr === 'object' ? JSON.stringify(argsStr, null, 2) : argsStr}`;
                 if (resultStr) {
                     let resFormatted = typeof resultStr === 'object' ? JSON.stringify(resultStr, null, 2) : resultStr;
-                    // Cap max lines
-                    const lines = resFormatted.split('\\n');
+                    const lines = resFormatted.split('\n');
                     if (lines.length > 8) {
-                        resFormatted = lines.slice(0, 8).join('\\n') + '\\n... (truncated)';
+                        resFormatted = lines.slice(0, 8).join('\n') + '\n... (truncated)';
                     }
-                    formattedContent += `\\n\\nOutput:\\n${resFormatted}`;
+                    formattedContent += `\n\nOutput:\n${resFormatted}`;
                 }
                 body.textContent = formattedContent;
                 details.appendChild(body);
 
                 consoleDiv.appendChild(details);
                 consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            }
+
+            // 1. A2A Agent Card Discovery via /.well-known/agent.json
+            async function discoverAgentCard() {
+                try {
+                    const res = await fetch('/.well-known/agent.json');
+                    if (res.ok) {
+                        const card = await res.json();
+                        activeAgentBadge.textContent = `${card.name} v${card.version}`;
+                        activeAgentBadge.style.display = 'inline-block';
+                        document.getElementById('agentDescription').textContent = card.description;
+                    }
+                } catch (e) {
+                    console.warn('Agent card discovery deferred:', e);
+                }
             }
 
             async function loadAgentTypes() {
@@ -465,7 +524,6 @@
                 } else {
                     descSpan.textContent = '';
                 }
-                
                 const supportsHistory = (selId === 'sdk' || selId === 'pi_agent');
                 document.getElementById('conversationSection').style.display = supportsHistory ? 'block' : 'none';
             }
@@ -476,34 +534,181 @@
                     const state = await res.json();
                     
                     statusText.textContent = state.status || 'Offline';
-                    mailboxInfo.textContent = `Mailbox: ${state.mailbox_size || 0}`;
-                    
-                    const agentBadge = document.getElementById('activeAgentBadge');
-                    if (state.agent_name) {
-                        agentBadge.textContent = state.agent_name;
-                        agentBadge.style.display = 'inline-block';
-                    } else {
-                        agentBadge.style.display = 'none';
-                    }
-
                     statusDot.className = 'dot';
                     if (state.status === 'PROCESSING') statusDot.classList.add('busy');
                     else if (state.status === 'WAITING') statusDot.classList.add('online');
                     else if (state.status === 'ERROR') statusDot.style.background = 'var(--danger)';
 
-                    const activeId = state.active_conversation_id;
+                    const activeId = state.active_conversation_id || currentContextId;
                     if (activeId && state.status !== 'OFFLINE') {
                         document.getElementById('activeConvoInfo').style.display = 'block';
                         document.getElementById('saveConvPanel').style.display = 'block';
-                        document.getElementById('activeConvId').textContent = activeId.substring(0, 12);
-                    } else {
-                        document.getElementById('activeConvoInfo').style.display = 'none';
-                        document.getElementById('saveConvPanel').style.display = 'none';
+                        document.getElementById('activeConvId').textContent = activeId.substring(0, 14);
                     }
                 } catch (e) {
                     statusText.textContent = 'Connection Error';
-                    statusDot.className = 'dot';
                 }
+            }
+
+            // 2. Dispatch Task via A2A Streaming Endpoint: POST /message:stream
+            async function sendMessageA2A() {
+                const input = document.getElementById('messageInput');
+                const text = input.value.trim();
+                if (!text) return;
+
+                addLog(text, 'user-msg');
+                input.value = '';
+                const sendBtn = document.getElementById('sendBtn');
+                sendBtn.disabled = true;
+
+                const taskId = 'task-' + Math.random().toString(36).substring(2, 10);
+                activeStreamCard = null;
+                currentStreamText = '';
+
+                statusDot.className = 'dot busy';
+                statusText.textContent = 'A2A Streaming...';
+
+                try {
+                    const response = await fetch('/message:stream', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'text/event-stream'
+                        },
+                        body: JSON.stringify({
+                            message: {
+                                role: 'ROLE_USER',
+                                contextId: currentContextId,
+                                taskId: taskId,
+                                parts: [{ text: text, mediaType: 'text/plain' }]
+                            }
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json();
+                        addLog(`A2A Error: ${err.detail || response.statusText}`, 'error');
+                        sendBtn.disabled = false;
+                        updateStatus();
+                        return;
+                    }
+
+                    // Read SSE stream using Fetch Streams API
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n\n');
+                        buffer = lines.pop(); // keep remainder
+
+                        for (const block of lines) {
+                            if (!block.trim() || block.startsWith(':')) continue;
+                            const dataLine = block.split('\n').find(l => l.startsWith('data: '));
+                            if (!dataLine) continue;
+
+                            const rawJson = dataLine.substring(6);
+                            try {
+                                const streamResp = JSON.parse(rawJson);
+                                handleA2AStreamResponse(streamResp);
+                            } catch (parseErr) {
+                                console.error('Error parsing SSE json:', parseErr, rawJson);
+                            }
+                        }
+                    }
+                } catch (netErr) {
+                    addLog(`Network Error during A2A turn: ${netErr}`, 'error');
+                } finally {
+                    sendBtn.disabled = false;
+                    updateStatus();
+                }
+            }
+
+            // 3. Process Inbound A2A Stream Responses
+            function handleA2AStreamResponse(resp) {
+                // Initial Task Snapshot
+                if (resp.task) {
+                    console.log('Task initialized:', resp.task.id);
+                    return;
+                }
+
+                // Incremental Status / Event Update
+                if (resp.statusUpdate) {
+                    const su = resp.statusUpdate;
+                    const meta = su.metadata || {};
+
+                    // A. Text Delta streaming
+                    if (meta.is_chunk && su.status?.message) {
+                        const delta = su.status.message.parts?.[0]?.text || '';
+                        appendStreamingDelta(delta);
+                        return;
+                    }
+
+                    // B. Tool Call Event
+                    if (meta.event_type === 'AGENT_TOOL_START') {
+                        addToolCallLog(meta.toolName || 'tool', meta.args || {});
+                        return;
+                    } else if (meta.event_type === 'AGENT_TOOL_END') {
+                        // Tool output handled inline
+                        return;
+                    }
+
+                    // C. Sub-Task Delegation
+                    if (meta.event_type === 'TASK_SUBTASK_STARTED') {
+                        addToolCallLog('delegate', meta.args || meta, '', true);
+                        return;
+                    } else if (meta.event_type === 'TASK_SUBTASK_COMPLETED') {
+                        addLog('Sub-task completed successfully', 'system-info');
+                        return;
+                    }
+
+                    // D. Terminal States
+                    if (su.status?.state === 'TASK_STATE_COMPLETED') {
+                        const finalText = su.status.message?.parts?.[0]?.text;
+                        finalizeStreamingCard(finalText);
+                    } else if (su.status?.state === 'TASK_STATE_FAILED') {
+                        const errText = su.status.message?.parts?.[0]?.text || 'Task failed';
+                        addLog(errText, 'error');
+                    }
+                }
+
+                // Direct Final Message
+                if (resp.message && resp.message.parts) {
+                    const text = resp.message.parts.map(p => p.text).filter(Boolean).join('\n');
+                    finalizeStreamingCard(text);
+                }
+            }
+
+            document.getElementById('messageInput').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    sendMessageA2A();
+                }
+            });
+
+            async function initAgent() {
+                const agentType = document.getElementById('agentType').value;
+                const workspacePath = document.getElementById('workspacePath').value;
+                const conversationId = document.getElementById('resumeConversation').value;
+
+                addLog(`Deploying ${agentType} agent...`, 'system-info');
+                const res = await fetch('/agent/init', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        agent_type: agentType,
+                        workspace_path: workspacePath,
+                        conversation_id: conversationId || null
+                    })
+                });
+                const data = await res.json();
+                addLog(`Agent ready: ${data.agent_id}`, 'system-info');
+                discoverAgentCard();
+                updateStatus();
             }
 
             async function loadConversations() {
@@ -529,6 +734,7 @@
 
                 consoleDiv.innerHTML = '';
                 addLog(`Resumed session: ${conversationId}`, 'system-info');
+                currentContextId = conversationId;
                 try {
                     const res = await fetch(`/agent/conversations/history?workspace_path=${encodeURIComponent(workspacePath)}&conversation_id=${encodeURIComponent(conversationId)}`);
                     const history = await res.json();
@@ -598,113 +804,10 @@
                 loadConversations();
             }
 
-            async function initAgent() {
-                const agentType = document.getElementById('agentType').value;
-                const workspacePath = document.getElementById('workspacePath').value;
-                const conversationId = document.getElementById('resumeConversation').value;
-
-                addLog(`Deploying ${agentType} agent...`, 'system-info');
-                const res = await fetch('/agent/init', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        agent_type: agentType,
-                        workspace_path: workspacePath,
-                        conversation_id: conversationId || null
-                    })
-                });
-                const data = await res.json();
-                addLog(`Agent ready: ${data.agent_id}`, 'system-info');
-                loadConversations();
-                updateStatus();
-            }
-
-            async function sendMessage() {
-                const input = document.getElementById('messageInput');
-                const text = input.value.trim();
-                if (!text) return;
-
-                addLog(text, 'user-msg');
-                input.value = '';
-                await fetch('/agent/message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message_type: 'MESSAGE', payload: { text: text } })
-                });
-            }
-
-            document.getElementById('messageInput').addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    sendMessage();
-                }
-            });
-
-            // Tracking active tool calls to merge start + end
-            const pendingToolCalls = {};
-
-            function connectWS() {
-                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
-                ws.onmessage = function(event) {
-                    const data = JSON.parse(event.data);
-
-                    // 1. High Priority: Final Assistant Responses & Direct Messages
-                    if (data.type === 'TASK_COMPLETED' || data.type === 'MESSAGE' || data.type === 'ECHO_RECEIVED') {
-                        let text = '';
-                        if (data.payload && data.payload.text) {
-                            text = data.payload.text;
-                        } else if (typeof data.payload === 'string') {
-                            text = data.payload;
-                        }
-                        if (text) {
-                            addLog(text, 'agent-msg');
-                        }
-                    } 
-                    // 2. Collapsible Tool Calls (Clean summary + truncated parameters)
-                    else if (data.type === 'AGENT_TOOL_START') {
-                        const callId = data.payload?.toolCallId || 'tool';
-                        const toolName = data.payload?.toolName || 'tool';
-                        const args = data.payload?.args || {};
-                        pendingToolCalls[callId] = { toolName, args };
-                    } 
-                    else if (data.type === 'AGENT_TOOL_END') {
-                        const callId = data.payload?.toolCallId || 'tool';
-                        const info = pendingToolCalls[callId] || { toolName: data.payload?.toolName || 'tool', args: '' };
-                        delete pendingToolCalls[callId];
-                        
-                        let resultText = '';
-                        const res = data.payload?.result;
-                        if (res && res.content && Array.isArray(res.content)) {
-                            resultText = res.content.map(c => c.text || '').join('\\n');
-                        } else if (typeof res === 'string') {
-                            resultText = res;
-                        } else if (res) {
-                            resultText = JSON.stringify(res);
-                        }
-                        
-                        addToolCallLog(info.toolName, info.args, resultText);
-                    }
-                    // 3. System Lifecycle & Errors
-                    else if (data.type === 'AGENT_STARTED') {
-                        addLog('Agent online', 'system-info');
-                    } 
-                    else if (data.type === 'AGENT_TERMINATED') {
-                        addLog('Agent terminated', 'system-info');
-                    }
-                    else if (data.type === 'TASK_FAILED' || data.type === 'TASK_PRECONDITIONS_VIOLATED' || data.type === 'TASK_POSTCONDITIONS_VIOLATED') {
-                        addLog(`Task Error: ${data.payload?.category || data.type}`, 'error');
-                    }
-
-                    updateStatus();
-                };
-                ws.onclose = () => setTimeout(connectWS, 2000);
-            }
-
             // Initial load
             loadAgentTypes();
-            connectWS();
-            setInterval(updateStatus, 2500);
+            discoverAgentCard();
+            setInterval(updateStatus, 3000);
             setTimeout(loadConversations, 800);
         </script>
     </body>
