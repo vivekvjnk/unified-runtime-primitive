@@ -1,7 +1,7 @@
 # Unified Runtime Primitive (URP) — Reference Architecture & Specification
 
 > **Package:** `urp-core`  
-> **License:** GNU General Public License v3.0 (GPLv3)  
+> **License:** Apache License 2.0 (Apache-2.0)  
 > **Status:** Reference Implementation & Architecture Specification  
 > **Primary Reference Implementation:** Python (`urp`)
 
@@ -385,4 +385,4 @@ if __name__ == "__main__":
 
 ## 9. [License](LICENSE)
 
-This project is licensed under the **GNU General Public License v3.0 (GPLv3)**.
+This project is licensed under the **Apache License, Version 2.0 (Apache-2.0)**.

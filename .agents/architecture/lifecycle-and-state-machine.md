@@ -19,16 +19,16 @@ Every URP agent is governed by an explicit finite state machine (`AgentStatus` d
                         └────────┬─────────┘
                                  │ start() [verifies start preconditions]
                                  ▼
-                   ┌──────────► ┌──────────────────┐
-                   │            │     WAITING      │
-                   │            └────────┬─────────┘
-                   │                     │ mailbox.get() & pre_ok == True
-                   │                     ▼
-                   │            ┌──────────────────┐
-                   │            │    PROCESSING    │
-                   │            └────────┬─────────┘
-                   │                     │ process() completes & emits outcome
-                   └─────────────────────┘
+            ┌──────────► ┌──────────────────┐
+            │            │     WAITING      │
+            │            └────────┬─────────┘
+            │                     │ mailbox.get() & pre_ok == True
+            │                     ▼
+            │            ┌──────────────────┐
+            │            │    PROCESSING    │
+            │            └────────┬─────────┘
+            │                     │ process() completes & emits outcome
+            └─────────────────────┘
                                  │
                                  │ shutdown()
                                  ▼
