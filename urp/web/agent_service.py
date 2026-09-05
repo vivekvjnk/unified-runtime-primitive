@@ -16,7 +16,7 @@ from urp.core import (
     URPHost,
 )
 from ..config_loader import load_all_agent_configs
-from urp.agents import EchoAgent
+from urp.agents import EchoAgent, PiGeminiAgent
 from urp.harnesses import SDKURPAgent, PiURPAgent
 
 logger = logging.getLogger("urp.web.agent_service")
@@ -86,23 +86,23 @@ class AgentHostingService:
         if "pi_agent" not in loaded_from_json:
             register_agent_if_absent(
                 name="pi_agent",
-                factory_func=lambda descriptor=None: PiURPAgent(
+                factory_func=lambda descriptor=None: PiGeminiAgent(
                     descriptor=descriptor
                     or AgentDescriptor(
-                        agent_id="vhl.pi.v1",
-                        name="Pi Coding Agent",
+                        agent_id="vhl.pi.gemini.v1",
+                        name="Pi Gemini Coding Agent",
                         version="1.0.0",
-                        description="Autonomous agent powered by the Pi harness with .agents skill discovery.",
-                        capabilities=["TERMINAL", "FILE_EDITOR", "BASH", "SKILLS"],
+                        description="Autonomous agent using Google Vertex Gemini 3.8 Flash with medium thinking effort.",
+                        capabilities=["READ", "BASH", "EDIT", "WRITE", "SKILLS"],
                         accepted_message_types=["MESSAGE", "TASK"],
                     )
                 ),
                 descriptor=AgentDescriptor(
-                    agent_id="vhl.pi.v1",
-                    name="Pi Coding Agent",
+                    agent_id="vhl.pi.gemini.v1",
+                    name="Pi Gemini Coding Agent",
                     version="1.0.0",
-                    description="Autonomous agent powered by the Pi harness with .agents skill discovery.",
-                    capabilities=["TERMINAL", "FILE_EDITOR", "BASH", "SKILLS"],
+                    description="Autonomous agent using Google Vertex Gemini 3.8 Flash with medium thinking effort.",
+                    capabilities=["READ", "BASH", "EDIT", "WRITE", "SKILLS"],
                     accepted_message_types=["MESSAGE", "TASK"],
                 ),
             )

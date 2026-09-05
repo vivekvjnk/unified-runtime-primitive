@@ -2,17 +2,17 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "name": "pi_agent",
   "descriptor": {
-    "agent_id": "vhl.pi.v1",
-    "name": "Pi Coding Agent",
+    "agent_id": "vhl.pi.gemini.v1",
+    "name": "Pi Gemini Coding Agent",
     "version": "1.0.0",
-    "description": "General-purpose autonomous software engineer powered by Pi coding agent with dynamic model routing, thinking effort levels, and compaction controls.",
+    "description": "Autonomous software engineering agent powered by Pi coding agent with Google Vertex Gemini 3.8 Flash and medium thinking effort.",
     "capabilities": ["READ", "BASH", "EDIT", "WRITE", "SKILLS"],
     "accepted_message_types": ["MESSAGE", "TASK"]
   },
   "harness": "pi",
   "configuration": {
-    "model": "claude-sonnet",
-    "provider": "anthropic",
+    "provider": "google-vertex",
+    "model": "gemini-3.8-flash",
     "thinking_level": "medium",
     "settlement_timeout": 600,
     "auto_compaction": true,
@@ -28,7 +28,7 @@
     },
     "steeringMode": "one-at-a-time",
     "followUpMode": "one-at-a-time",
-    "system_prompt": "You are a helpful, rigorous AI software engineering agent with access to read, bash, edit, and write tools. Follow user requirements accurately.",
+    "system_prompt": "You are a helpful, expert AI software engineering agent powered by Pi. You have access to bash, read, edit, and write tools. Follow instructions carefully and provide clean, concise reasoning.",
     "tools": ["read", "bash", "edit", "write"]
   }
 }

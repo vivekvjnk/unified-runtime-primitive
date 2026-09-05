@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 from urp.core import AbstractURPAgent, AgentDescriptor, register_agent, register_agent_if_absent
-from urp.agents import EchoAgent
+from urp.agents import EchoAgent, PiGeminiAgent
 from urp.harnesses import SDKURPAgent, PiURPAgent
 
 logger = logging.getLogger("urp.config_loader")
@@ -22,8 +22,9 @@ logger = logging.getLogger("urp.config_loader")
 HARNESS_MAP: Dict[str, Type[AbstractURPAgent]] = {
     "echo": EchoAgent,
     "sdk": SDKURPAgent,
-    "pi": PiURPAgent,
-    "pi_harness": PiURPAgent,
+    "pi": PiGeminiAgent,
+    "pi_harness": PiGeminiAgent,
+    "pi_gemini": PiGeminiAgent,
 }
 
 

@@ -26,7 +26,7 @@ from .core import (
     URPHost,
 )
 from .harnesses import PiURPAgent, PiRpcClient, SDKURPAgent
-from .agents import EchoAgent
+from .agents import EchoAgent, PiGeminiAgent
 from .config_loader import (
     load_agent_config_from_file,
     register_agent_from_file,
@@ -65,6 +65,7 @@ __all__ = [
     "PiRpcClient",
     "SDKURPAgent",
     "EchoAgent",
+    "PiGeminiAgent",
     # Config loader
     "load_agent_config_from_file",
     "register_agent_from_file",

@@ -18,7 +18,8 @@ def test_load_pi_agent_config():
     config = load_agent_config_from_file(config_path)
     assert config["name"] == "pi_agent"
     assert config["harness"] == "pi"
-    assert config["configuration"]["model"] == "claude-sonnet"
+    assert config["configuration"]["model"] == "gemini-3.8-flash"
+    assert config["configuration"]["provider"] == "google-vertex"
     assert config["configuration"]["thinking_level"] == "medium"
     assert config["configuration"]["compaction"]["enabled"] is True
 
@@ -56,6 +57,6 @@ def test_load_all_agent_configs():
 
     # Verify factory in registry
     factory = get_agent_factory("pi_agent")
-    assert factory.descriptor.agent_id == "vhl.pi.v1"
+    assert factory.descriptor.agent_id == "vhl.pi.gemini.v1"
     assert factory.descriptor.metadata["default_configuration"]["thinking_level"] == "medium"
-    assert factory.descriptor.metadata["default_configuration"]["model"] == "claude-sonnet"
+    assert factory.descriptor.metadata["default_configuration"]["model"] == "gemini-3.8-flash"
