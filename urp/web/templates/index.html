@@ -18,6 +18,7 @@
                 --console-bg: #020617;
                 --danger: #ef4444;
                 --warning: #f59e0b;
+                --tool-bg: #0f172a;
             }
             * { box-sizing: border-box; }
             body { 
@@ -126,26 +127,109 @@
                 background: var(--console-bg);
                 border-radius: 8px;
                 border: 1px solid var(--border);
-                padding: 1rem;
+                padding: 1.25rem;
                 overflow-y: auto;
-                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-                font-size: 0.85rem;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-size: 0.9rem;
                 line-height: 1.6;
+                display: flex;
+                flex-direction: column;
+                gap: 0.85rem;
             }
             
-            .event { margin-bottom: 0.65rem; border-left: 2px solid var(--border); padding-left: 0.75rem; }
-            .event.message { border-left-color: var(--accent); background: rgba(16, 185, 129, 0.05); }
-            .event.user-msg { border-left-color: var(--primary); background: rgba(56, 189, 248, 0.05); }
-            .event.agent-msg { border-left-color: var(--accent); background: rgba(16, 185, 129, 0.08); }
-            .event.error { border-left-color: var(--danger); color: #fca5a5; }
-            .event-time { color: var(--text-dim); font-size: 0.75rem; margin-right: 0.5rem; }
+            /* High-Priority User and Agent Message Cards */
+            .event {
+                border-radius: 8px;
+                padding: 0.85rem 1.15rem;
+                max-width: 90%;
+                word-wrap: break-word;
+            }
+            .event.user-msg {
+                align-self: flex-end;
+                background: #0284c7;
+                color: #f8fafc;
+                border-bottom-right-radius: 2px;
+            }
+            .event.agent-msg {
+                align-self: flex-start;
+                background: var(--card-bg);
+                color: var(--text-main);
+                border: 1px solid var(--border);
+                border-bottom-left-radius: 2px;
+            }
+            .event.system-info {
+                align-self: center;
+                background: transparent;
+                color: var(--text-dim);
+                font-size: 0.75rem;
+                padding: 0.25rem 0.5rem;
+                text-align: center;
+            }
+            .event.error {
+                align-self: center;
+                background: rgba(239, 68, 68, 0.1);
+                border: 1px solid var(--danger);
+                color: #fca5a5;
+                font-size: 0.85rem;
+            }
+            .event-time {
+                color: rgba(255, 255, 255, 0.5);
+                font-size: 0.7rem;
+                margin-bottom: 0.25rem;
+                display: block;
+            }
+            .event.agent-msg .event-time {
+                color: var(--text-dim);
+            }
 
-            /* Markdown rendering styles */
+            /* Collapsible Tool Call Summary Box */
+            .tool-call-box {
+                align-self: flex-start;
+                background: var(--tool-bg);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                margin: 0.25rem 0;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                font-size: 0.8rem;
+                max-width: 85%;
+            }
+            .tool-call-box summary {
+                padding: 0.45rem 0.75rem;
+                cursor: pointer;
+                color: var(--primary);
+                font-weight: 500;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                user-select: none;
+            }
+            .tool-call-box summary:hover {
+                color: var(--primary-hover);
+            }
+            .tool-call-badge {
+                background: rgba(56, 189, 248, 0.15);
+                color: var(--primary);
+                padding: 0.1rem 0.4rem;
+                border-radius: 4px;
+                font-size: 0.75rem;
+            }
+            .tool-call-content {
+                padding: 0.5rem 0.75rem;
+                border-top: 1px solid var(--border);
+                color: var(--text-dim);
+                max-height: 120px;
+                overflow-y: auto;
+                white-space: pre-wrap;
+                font-size: 0.75rem;
+                line-height: 1.4;
+            }
+
+            /* Markdown styling for rich responses */
             .markdown-body { font-size: 0.9rem; line-height: 1.6; }
-            .markdown-body h1, .markdown-body h2, .markdown-body h3 { color: var(--primary); margin-top: 0.75rem; margin-bottom: 0.4rem; }
-            .markdown-body p { margin-bottom: 0.5rem; }
-            .markdown-body code { background: #1e293b; padding: 0.2rem 0.35rem; border-radius: 4px; font-family: monospace; font-size: 0.85em; }
-            .markdown-body pre { background: #020617; padding: 0.75rem; border-radius: 6px; overflow-x: auto; border: 1px solid var(--border); }
+            .markdown-body h1, .markdown-body h2, .markdown-body h3 { color: var(--primary); margin-top: 0.6rem; margin-bottom: 0.3rem; }
+            .markdown-body p { margin-bottom: 0.45rem; }
+            .markdown-body code { background: #0b1120; padding: 0.15rem 0.35rem; border-radius: 4px; font-family: monospace; font-size: 0.85em; }
+            .markdown-body pre { background: #020617; padding: 0.65rem; border-radius: 6px; overflow-x: auto; border: 1px solid var(--border); }
             .markdown-body pre code { background: transparent; padding: 0; }
 
             .input-area {
@@ -312,6 +396,48 @@
                 consoleDiv.scrollTop = consoleDiv.scrollHeight;
             }
 
+            function addToolCallLog(toolName, argsStr, resultStr) {
+                const details = document.createElement('details');
+                details.className = 'tool-call-box';
+
+                const summary = document.createElement('summary');
+                const badge = document.createElement('span');
+                badge.className = 'tool-call-badge';
+                badge.textContent = `tool: ${toolName}`;
+                
+                let paramPreview = '';
+                if (typeof argsStr === 'object') {
+                    paramPreview = JSON.stringify(argsStr);
+                } else {
+                    paramPreview = String(argsStr);
+                }
+                if (paramPreview.length > 60) {
+                    paramPreview = paramPreview.substring(0, 60) + '...';
+                }
+
+                summary.appendChild(badge);
+                summary.appendChild(document.createTextNode(` ${paramPreview}`));
+                details.appendChild(summary);
+
+                const body = document.createElement('div');
+                body.className = 'tool-call-content';
+                let formattedContent = `Arguments:\n${typeof argsStr === 'object' ? JSON.stringify(argsStr, null, 2) : argsStr}`;
+                if (resultStr) {
+                    let resFormatted = typeof resultStr === 'object' ? JSON.stringify(resultStr, null, 2) : resultStr;
+                    // Cap max lines
+                    const lines = resFormatted.split('\\n');
+                    if (lines.length > 8) {
+                        resFormatted = lines.slice(0, 8).join('\\n') + '\\n... (truncated)';
+                    }
+                    formattedContent += `\\n\\nOutput:\\n${resFormatted}`;
+                }
+                body.textContent = formattedContent;
+                details.appendChild(body);
+
+                consoleDiv.appendChild(details);
+                consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            }
+
             async function loadAgentTypes() {
                 try {
                     const res = await fetch('/agent/types');
@@ -402,14 +528,13 @@
                 if (!conversationId) return;
 
                 consoleDiv.innerHTML = '';
-                addLog(`Loading history for session: ${conversationId}...`, 'event');
+                addLog(`Resumed session: ${conversationId}`, 'system-info');
                 try {
                     const res = await fetch(`/agent/conversations/history?workspace_path=${encodeURIComponent(workspacePath)}&conversation_id=${encodeURIComponent(conversationId)}`);
                     const history = await res.json();
                     history.forEach(item => {
                         addLog(item.text, item.role === 'user' ? 'user-msg' : 'agent-msg');
                     });
-                    addLog(`Loaded ${history.length} historical turns.`, 'event');
                 } catch (e) {
                     addLog(`Error loading history: ${e}`, 'error');
                 }
@@ -427,7 +552,7 @@
                 });
                 const data = await res.json();
                 if (data.status === 'saved') {
-                    addLog(`Session saved as '${name}'`, 'event');
+                    addLog(`Session saved as '${name}'`, 'system-info');
                     document.getElementById('saveConvName').value = '';
                     loadConversations();
                 } else {
@@ -478,7 +603,7 @@
                 const workspacePath = document.getElementById('workspacePath').value;
                 const conversationId = document.getElementById('resumeConversation').value;
 
-                addLog(`Deploying ${agentType} agent...`, 'event');
+                addLog(`Deploying ${agentType} agent...`, 'system-info');
                 const res = await fetch('/agent/init', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -489,7 +614,7 @@
                     })
                 });
                 const data = await res.json();
-                addLog(`Agent deployed: ${data.agent_id} (${agentType})`, 'event');
+                addLog(`Agent ready: ${data.agent_id}`, 'system-info');
                 loadConversations();
                 updateStatus();
             }
@@ -515,33 +640,62 @@
                 }
             });
 
+            // Tracking active tool calls to merge start + end
+            const pendingToolCalls = {};
+
             function connectWS() {
                 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
                 ws.onmessage = function(event) {
                     const data = JSON.parse(event.data);
-                    let displayMsg = '';
-                    let logType = 'event';
 
+                    // 1. High Priority: Final Assistant Responses & Direct Messages
                     if (data.type === 'TASK_COMPLETED' || data.type === 'MESSAGE' || data.type === 'ECHO_RECEIVED') {
-                        logType = 'agent-msg';
+                        let text = '';
                         if (data.payload && data.payload.text) {
-                            displayMsg = data.payload.text;
+                            text = data.payload.text;
                         } else if (typeof data.payload === 'string') {
-                            displayMsg = data.payload;
-                        } else {
-                            displayMsg = JSON.stringify(data.payload);
+                            text = data.payload;
                         }
-                    } else if (data.type === 'AGENT_PROGRESS_UPDATE' || data.type === 'TASK_PROGRESS') {
-                        logType = 'event';
-                        displayMsg = data.payload?.text || `[Progress] ${JSON.stringify(data.payload)}`;
-                    } else {
-                        displayMsg = `[${data.type}] ${JSON.stringify(data.payload)}`;
+                        if (text) {
+                            addLog(text, 'agent-msg');
+                        }
+                    } 
+                    // 2. Collapsible Tool Calls (Clean summary + truncated parameters)
+                    else if (data.type === 'AGENT_TOOL_START') {
+                        const callId = data.payload?.toolCallId || 'tool';
+                        const toolName = data.payload?.toolName || 'tool';
+                        const args = data.payload?.args || {};
+                        pendingToolCalls[callId] = { toolName, args };
+                    } 
+                    else if (data.type === 'AGENT_TOOL_END') {
+                        const callId = data.payload?.toolCallId || 'tool';
+                        const info = pendingToolCalls[callId] || { toolName: data.payload?.toolName || 'tool', args: '' };
+                        delete pendingToolCalls[callId];
+                        
+                        let resultText = '';
+                        const res = data.payload?.result;
+                        if (res && res.content && Array.isArray(res.content)) {
+                            resultText = res.content.map(c => c.text || '').join('\\n');
+                        } else if (typeof res === 'string') {
+                            resultText = res;
+                        } else if (res) {
+                            resultText = JSON.stringify(res);
+                        }
+                        
+                        addToolCallLog(info.toolName, info.args, resultText);
+                    }
+                    // 3. System Lifecycle & Errors
+                    else if (data.type === 'AGENT_STARTED') {
+                        addLog('Agent online', 'system-info');
+                    } 
+                    else if (data.type === 'AGENT_TERMINATED') {
+                        addLog('Agent terminated', 'system-info');
+                    }
+                    else if (data.type === 'TASK_FAILED' || data.type === 'TASK_PRECONDITIONS_VIOLATED' || data.type === 'TASK_POSTCONDITIONS_VIOLATED') {
+                        addLog(`Task Error: ${data.payload?.category || data.type}`, 'error');
                     }
 
-                    if (displayMsg) {
-                        addLog(displayMsg, logType);
-                    }
                     updateStatus();
                 };
                 ws.onclose = () => setTimeout(connectWS, 2000);

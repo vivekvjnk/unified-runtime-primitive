@@ -135,7 +135,7 @@ async def test_pi_urp_agent_telemetry_emission(agent_context):
     await asyncio.wait_for(task_done_event.wait(), timeout=20.0)
 
     emitted_types = [m.type for m in emitted]
-    assert "AGENT_PROGRESS_UPDATE" in emitted_types or "AGENT_TOOL_START" in emitted_types
+    assert "AGENT_TOOL_START" in emitted_types or "AGENT_TOOL_END" in emitted_types
 
     await agent.shutdown()
 

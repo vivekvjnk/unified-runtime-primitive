@@ -152,6 +152,16 @@ def main():
                     {"type": "agent_start"},
                     {"type": "turn_start"},
                 ]
+            elif "telemetry_vhl_test" in msg_text:
+                events = [
+                    {"type": "agent_start"},
+                    {"type": "turn_start"},
+                    {"type": "tool_execution_start", "toolName": "bash", "args": {"command": "echo telemetry_vhl_test"}},
+                    {"type": "tool_execution_end", "toolName": "bash", "result": "telemetry_vhl_test\n"},
+                    {"type": "turn_end"},
+                    {"type": "agent_end"},
+                    {"type": "agent_settled"},
+                ]
             else:
                 events = [
                     {"type": "agent_start"},

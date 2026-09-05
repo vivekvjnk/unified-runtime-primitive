@@ -101,8 +101,11 @@ class PiURPAgent(AbstractURPAgent):
 
     async def _forward_telemetry_event(self, rpc_evt: RpcEvent) -> None:
         """Maps Pi RPC events to URP telemetry envelopes and emits them."""
+        # Suppress noisy raw streaming chunks (text_delta, text_start, text_end)
+        if rpc_evt.type == "message_update":
+            return
+
         msg_type_map = {
-            "message_update": "AGENT_PROGRESS_UPDATE",
             "tool_execution_start": "AGENT_TOOL_START",
             "tool_execution_end": "AGENT_TOOL_END",
             "compaction_start": "AGENT_COMPACTION_START",
