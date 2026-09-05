@@ -49,8 +49,15 @@ class URPHost:
         
         return self.agent
 
-    async def send_message(self, message_type: str, payload: Any, sender: str = "host"):
-        """Sends a message to the agent's mailbox."""
+    async def send_message(
+        self,
+        message_type: str,
+        payload: Any,
+        sender: str = "host",
+        context_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        """Sends a message to the agent's mailbox with optional A2A routing anchors."""
         if not self.agent:
             raise RuntimeError("Agent not initialized. Call initialize_and_start first.")
             
@@ -58,7 +65,9 @@ class URPHost:
             type=message_type,
             payload=payload,
             sender=sender,
-            receiver=self.descriptor.agent_id
+            receiver=self.descriptor.agent_id,
+            context_id=context_id,
+            task_id=task_id,
         )
         
         logger.info(f"[URPHost] Sending message {message_type} to agent...")

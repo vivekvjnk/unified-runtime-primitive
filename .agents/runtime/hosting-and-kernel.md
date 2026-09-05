@@ -43,11 +43,13 @@ This document describes the host runtime kernel (`urp.host.URPHost`), the indepe
 
 | Route | Method | Purpose |
 |---|---|---|
-| `/` | `GET` | Interactive browser-based testing console. |
-| `/agent/init` | `POST` | Initializes and starts an agent instance with specified workspace path. |
-| `/agent/message` | `POST` | Ingests a new message into the active agent mailbox. |
-| `/agent/state` | `GET` | Returns current serialized state (`status`, `session_id`, `mailbox_size`, `last_process_result`). |
+| `/` | `GET` | Interactive browser-based testing console with markdown & event timeline rendering. |
+| `/agent/types` | `GET` | Lists all registered agent types discovered via `AgentRegistry`. |
+| `/agent/init` | `POST` | Initializes and starts an agent instance dynamically resolved via `AgentRegistry`. |
+| `/agent/message` | `POST` | Ingests a new message into the active agent mailbox with optional `context_id` and `task_id`. |
+| `/agent/state` | `GET` | Returns current serialized state (`status`, `session_id`, `mailbox_size`, `last_process_result`, `agent_name`). |
 | `/agent/conversations` | `GET` | Lists persistent conversation sessions saved in `.conversation/conversation_map.json`. |
+| `/agent/conversations/history` | `GET` | Reconstructs historical user/agent conversation events from workspace. |
 | `/agent/conversations/save` | `POST` | Persists the active conversation ID under a human-readable name. |
 | `/agent/browse` | `GET` | Directory browser endpoint for selecting workspace paths from the web UI. |
 | `/ws` | `WebSocket` | Real-time event stream broadcasting agent lifecycle and output envelopes to UI. |

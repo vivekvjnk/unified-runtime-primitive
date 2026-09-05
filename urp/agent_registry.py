@@ -125,6 +125,12 @@ def get_registered_agent_descriptors() -> List[AgentDescriptor]:
         return [f.descriptor for f in _agent_factories.values()]
 
 
+def get_registered_agent_types() -> Dict[str, AgentDescriptor]:
+    """Return a mapping of registered agent type names to their descriptors."""
+    with _registry_lock:
+        return {name: f.descriptor for name, f in _agent_factories.items()}
+
+
 def add_pre_create_hook(hook: Callable[[str, Any, Any], None]) -> None:
     """Register a global pre-create hook to execute before any agent is globally instantiated."""
     with _registry_lock:
