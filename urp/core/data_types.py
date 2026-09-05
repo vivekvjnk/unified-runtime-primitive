@@ -71,9 +71,9 @@ class AgentDescriptor(BaseModel):
     accepted_message_types: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    def to_agent_card(self) -> Dict[str, Any]:
+    def to_agent_card(self, base_url: Optional[str] = None) -> Dict[str, Any]:
         """Serializes descriptor to an A2A Agent Card format."""
-        return {
+        card: Dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "version": self.version,
@@ -81,6 +81,9 @@ class AgentDescriptor(BaseModel):
             "accepted_message_types": self.accepted_message_types,
             "metadata": self.metadata,
         }
+        if base_url:
+            card["url"] = f"{base_url.rstrip('/')}/a2a/v1"
+        return card
 
 class MessageEnvelope(BaseModel):
     """
