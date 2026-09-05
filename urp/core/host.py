@@ -56,6 +56,7 @@ class URPHost:
         sender: str = "host",
         context_id: Optional[str] = None,
         task_id: Optional[str] = None,
+        streaming: bool = False,
     ):
         """Sends a message to the agent's mailbox with optional A2A routing anchors."""
         if not self.agent:
@@ -68,9 +69,10 @@ class URPHost:
             receiver=self.descriptor.agent_id,
             context_id=context_id,
             task_id=task_id,
+            streaming=streaming,
         )
         
-        logger.info(f"[URPHost] Sending message {message_type} to agent...")
+        logger.info(f"[URPHost] Sending message {message_type} to agent (streaming={streaming})...")
         await self.agent.send(envelope)
         return envelope.message_id
 

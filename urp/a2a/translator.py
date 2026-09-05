@@ -129,6 +129,22 @@ class A2ATranslator:
                                 metadata=ra.get("metadata"),
                             )
                         )
+            elif hasattr(envelope.payload, "text"):
+                result_text = getattr(envelope.payload, "text", "")
+                raw_artifacts = getattr(envelope.payload, "artifacts", [])
+                for ra in raw_artifacts:
+                    if isinstance(ra, dict):
+                        part_list = [Part(text=ra.get("content", ""))] if "content" in ra else []
+                        artifacts.append(
+                            Artifact(
+                                artifact_id=ra.get("id", str(uuid4())),
+                                name=ra.get("name"),
+                                parts=part_list,
+                                metadata=ra.get("metadata"),
+                            )
+                        )
+            elif isinstance(envelope.payload, str):
+                result_text = envelope.payload
 
             status_msg = A2AMessage.from_text(
                 text=result_text or "Task completed successfully.",

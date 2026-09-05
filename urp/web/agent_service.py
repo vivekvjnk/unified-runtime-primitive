@@ -194,6 +194,7 @@ class AgentHostingService:
         payload: Any,
         context_id: Optional[str] = None,
         task_id: Optional[str] = None,
+        streaming: bool = False,
     ) -> str:
         """Sends a message to the active agent."""
         if not self.host:
@@ -203,6 +204,7 @@ class AgentHostingService:
             payload=payload,
             context_id=context_id,
             task_id=task_id,
+            streaming=streaming,
         )
 
     async def shutdown(self) -> None:
