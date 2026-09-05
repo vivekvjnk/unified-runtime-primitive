@@ -16,6 +16,7 @@ from .agent_registry import (
     get_registered_agent_types,
     register_agent_if_absent,
 )
+from .config_loader import load_all_agent_configs
 from .data_types import AgentContext, AgentDescriptor, MessageEnvelope
 from .host import URPHost
 from .sample_agent import EchoAgent
@@ -39,78 +40,82 @@ event_log: List[dict] = []
 
 
 def register_builtin_agents() -> None:
-    """Registers standard reference agents with the AgentRegistry."""
-    # 1. Echo Agent (Reference primitive test agent)
-    register_agent_if_absent(
-        name="echo",
-        factory_func=lambda descriptor=None: EchoAgent(
-            descriptor=descriptor
-            or AgentDescriptor(
+    """Registers standard reference agents from JSON config files and fallback built-ins."""
+    # First, load any agent configs from configs/agents directory
+    loaded_from_json = load_all_agent_configs()
+
+    # Fallback built-in registrations if configs directory was missing
+    if "echo" not in loaded_from_json:
+        register_agent_if_absent(
+            name="echo",
+            factory_func=lambda descriptor=None: EchoAgent(
+                descriptor=descriptor
+                or AgentDescriptor(
+                    agent_id="vhl.echo.v1",
+                    name="Echo Agent",
+                    version="1.0.0",
+                    description="Built-in diagnostic echo agent for testing runtime message loops.",
+                    capabilities=["ECHO"],
+                    accepted_message_types=["PING", "MESSAGE"],
+                )
+            ),
+            descriptor=AgentDescriptor(
                 agent_id="vhl.echo.v1",
                 name="Echo Agent",
                 version="1.0.0",
                 description="Built-in diagnostic echo agent for testing runtime message loops.",
                 capabilities=["ECHO"],
                 accepted_message_types=["PING", "MESSAGE"],
-            )
-        ),
-        descriptor=AgentDescriptor(
-            agent_id="vhl.echo.v1",
-            name="Echo Agent",
-            version="1.0.0",
-            description="Built-in diagnostic echo agent for testing runtime message loops.",
-            capabilities=["ECHO"],
-            accepted_message_types=["PING", "MESSAGE"],
-        ),
-    )
+            ),
+        )
 
-    # 2. SDK Agent (OpenHands SDK Agent with Terminal & FileEditor tools)
-    register_agent_if_absent(
-        name="sdk",
-        factory_func=lambda descriptor=None: SDKURPAgent(
-            descriptor=descriptor
-            or AgentDescriptor(
+    if "sdk" not in loaded_from_json:
+        register_agent_if_absent(
+            name="sdk",
+            factory_func=lambda descriptor=None: SDKURPAgent(
+                descriptor=descriptor
+                or AgentDescriptor(
+                    agent_id="vhl.sdk.v1",
+                    name="OpenHands SDK Agent",
+                    version="1.0.0",
+                    description="Autonomous coding agent powered by OpenHands SDK with terminal and file tools.",
+                    capabilities=["TERMINAL", "FILE_EDITOR"],
+                    accepted_message_types=["MESSAGE", "TASK"],
+                )
+            ),
+            descriptor=AgentDescriptor(
                 agent_id="vhl.sdk.v1",
                 name="OpenHands SDK Agent",
                 version="1.0.0",
                 description="Autonomous coding agent powered by OpenHands SDK with terminal and file tools.",
                 capabilities=["TERMINAL", "FILE_EDITOR"],
                 accepted_message_types=["MESSAGE", "TASK"],
-            )
-        ),
-        descriptor=AgentDescriptor(
-            agent_id="vhl.sdk.v1",
-            name="OpenHands SDK Agent",
-            version="1.0.0",
-            description="Autonomous coding agent powered by OpenHands SDK with terminal and file tools.",
-            capabilities=["TERMINAL", "FILE_EDITOR"],
-            accepted_message_types=["MESSAGE", "TASK"],
-        ),
-    )
+            ),
+        )
 
-    # 3. Pi Agent (Pi Agent Harness via high-performance JSON-RPC)
-    register_agent_if_absent(
-        name="pi_agent",
-        factory_func=lambda descriptor=None: PiURPAgent(
-            descriptor=descriptor
-            or AgentDescriptor(
+    if "pi_agent" not in loaded_from_json:
+        register_agent_if_absent(
+            name="pi_agent",
+            factory_func=lambda descriptor=None: PiURPAgent(
+                descriptor=descriptor
+                or AgentDescriptor(
+                    agent_id="vhl.pi.v1",
+                    name="Pi Coding Agent",
+                    version="1.0.0",
+                    description="Autonomous agent powered by the Pi harness with .agents skill discovery.",
+                    capabilities=["TERMINAL", "FILE_EDITOR", "BASH", "SKILLS"],
+                    accepted_message_types=["MESSAGE", "TASK"],
+                )
+            ),
+            descriptor=AgentDescriptor(
                 agent_id="vhl.pi.v1",
                 name="Pi Coding Agent",
                 version="1.0.0",
                 description="Autonomous agent powered by the Pi harness with .agents skill discovery.",
                 capabilities=["TERMINAL", "FILE_EDITOR", "BASH", "SKILLS"],
                 accepted_message_types=["MESSAGE", "TASK"],
-            )
-        ),
-        descriptor=AgentDescriptor(
-            agent_id="vhl.pi.v1",
-            name="Pi Coding Agent",
-            version="1.0.0",
-            description="Autonomous agent powered by the Pi harness with .agents skill discovery.",
-            capabilities=["TERMINAL", "FILE_EDITOR", "BASH", "SKILLS"],
-            accepted_message_types=["MESSAGE", "TASK"],
-        ),
-    )
+            ),
+        )
 
 
 # Register standard agents on module load
@@ -165,7 +170,12 @@ async def initialize_agent(
     abs_workspace = os.path.abspath(workspace_path)
     os.makedirs(abs_workspace, exist_ok=True)
 
-    agent_config = dict(configuration or {})
+    # Merge configuration: defaults from JSON config descriptor metadata + request overrides
+    default_cfg = descriptor.metadata.get("default_configuration") or {}
+    agent_config = dict(default_cfg)
+    if configuration:
+        agent_config.update(configuration)
+
     agent_config["workspace_path"] = abs_workspace
     agent_config["workspace_dir"] = abs_workspace
     if conversation_id:

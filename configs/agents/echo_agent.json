@@ -1,0 +1,15 @@
+{
+  "name": "echo",
+  "descriptor": {
+    "agent_id": "vhl.echo.v1",
+    "name": "Echo Diagnostic Agent",
+    "version": "1.0.0",
+    "description": "Minimal reference agent that echoes incoming messages back over the event bus.",
+    "capabilities": ["ECHO"],
+    "accepted_message_types": ["PING", "MESSAGE"]
+  },
+  "harness": "echo",
+  "configuration": {
+    "delay_seconds": 1.0
+  }
+}

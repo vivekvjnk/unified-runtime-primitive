@@ -54,9 +54,21 @@ class PiURPAgent(AbstractURPAgent):
         no_session = config.get("no_session", False)
         system_prompt = config.get("system_prompt")
         name = config.get("name") or self.descriptor.name
-        extra_args = config.get("extra_args")
+        extra_args = list(config.get("extra_args") or [])
         env = config.get("env")
         executable_path = config.get("executable_path") or "pi"
+
+        # Thinking level from configuration (off, minimal, low, medium, high, xhigh, max)
+        self.thinking_level: Optional[str] = config.get("thinking_level") or config.get("thinking")
+        if self.thinking_level and "--thinking" not in extra_args:
+            extra_args.extend(["--thinking", self.thinking_level])
+
+        # Auto-compaction & reserve/keep tokens flags if provided
+        self.auto_compaction: Optional[bool] = config.get("auto_compaction")
+        compaction_cfg = config.get("compaction") or {}
+        if isinstance(compaction_cfg, dict):
+            if "enabled" in compaction_cfg and self.auto_compaction is None:
+                self.auto_compaction = compaction_cfg.get("enabled")
 
         # Configurable settlement timeout defaulting to 10 minutes (600 seconds)
         self.settlement_timeout: float = float(
@@ -120,6 +132,10 @@ class PiURPAgent(AbstractURPAgent):
             state_resp = await self.pi_client.get_state()
             if not state_resp.success:
                 return False, f"Pi RPC initial state check failed: {state_resp.error}"
+
+            # Apply runtime compaction setting if configured
+            if self.auto_compaction is not None:
+                await self.pi_client.set_auto_compaction(self.auto_compaction)
 
             return True, "PiRpcClient started and verified successfully"
         except Exception as e:

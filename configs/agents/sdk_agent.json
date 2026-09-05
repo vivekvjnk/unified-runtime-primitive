@@ -1,0 +1,16 @@
+{
+  "name": "sdk",
+  "descriptor": {
+    "agent_id": "vhl.sdk.v1",
+    "name": "OpenHands SDK Agent",
+    "version": "1.0.0",
+    "description": "Autonomous software agent wrapping OpenHands SDK with file editor and terminal tools.",
+    "capabilities": ["TERMINAL", "FILE_EDITOR"],
+    "accepted_message_types": ["MESSAGE", "TASK"]
+  },
+  "harness": "sdk",
+  "configuration": {
+    "model": "gpt-4o",
+    "conversation_persistence": true
+  }
+}

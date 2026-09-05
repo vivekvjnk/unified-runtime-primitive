@@ -448,6 +448,26 @@ class PiRpcClient:
             "modelId": model_id,
         })
 
+    async def cycle_model(self) -> RpcResponse:
+        """Cycles to the next available model."""
+        return await self.send_command({"type": "cycle_model"})
+
+    async def set_thinking_level(self, level: str) -> RpcResponse:
+        """Sets thinking/reasoning effort level ('off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')."""
+        return await self.send_command({"type": "set_thinking_level", "level": level})
+
+    async def get_available_thinking_levels(self) -> RpcResponse:
+        """Gets available thinking levels for the current model."""
+        return await self.send_command({"type": "get_available_thinking_levels"})
+
+    async def set_auto_compaction(self, enabled: bool) -> RpcResponse:
+        """Enables or disables automatic context compaction."""
+        return await self.send_command({"type": "set_auto_compaction", "enabled": enabled})
+
+    async def set_auto_retry(self, enabled: bool) -> RpcResponse:
+        """Enables or disables automatic retry on transient errors."""
+        return await self.send_command({"type": "set_auto_retry", "enabled": enabled})
+
     async def compact(self, custom_instructions: Optional[str] = None) -> RpcResponse:
         """Triggers context compaction."""
         payload: Dict[str, Any] = {"type": "compact"}
