@@ -17,6 +17,7 @@ from .abstract_urp import (
 )
 from .agent_key import AgentKey, AgentReadiness, AgentEntry, AgentHandle
 from .agent_registry import AgentRegistry, register_agent, create_agent
+from .pi_harness import PiURPAgent, PiRpcClient
 
 __all__ = [
     "AgentStatus",
@@ -39,5 +40,7 @@ __all__ = [
     "AgentRegistry",
     "register_agent",
     "create_agent",
+    "PiURPAgent",
+    "PiRpcClient",
 ]
 
