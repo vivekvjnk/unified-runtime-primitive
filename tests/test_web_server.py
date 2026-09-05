@@ -1,10 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from urp.web_server import app
-from urp.data_types import AgentDescriptor
-from urp.agent_registry import register_agent_if_absent
-from urp.sample_agent import EchoAgent
+from urp.web import app
+from urp.core import AgentDescriptor, register_agent_if_absent
+from urp.agents import EchoAgent
 
 client = TestClient(app)
 

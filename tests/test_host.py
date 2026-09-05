@@ -6,9 +6,8 @@ import pytest
 # Add the parent directory to sys.path
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from urp.host import URPHost
-from urp.sample_agent import EchoAgent
-from urp.data_types import AgentDescriptor, AgentContext, MessageEnvelope
+from urp.core import URPHost, AgentDescriptor, AgentContext, MessageEnvelope
+from urp.agents import EchoAgent
 
 @pytest.mark.asyncio
 async def test_urp_host():

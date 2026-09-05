@@ -1,4 +1,4 @@
-from .core import (
+from .data_types import (
     AgentStatus,
     AgentDescriptor,
     AgentContext,
@@ -8,33 +8,27 @@ from .core import (
     ProcessResult,
     FailureCategory,
     ProcessResultPayload,
+)
+from .abstract_urp import (
     AbstractURPAgent,
     PostconditionsViolatedError,
     PreconditionsViolatedError,
     StartPreconditionsViolatedError,
-    AgentKey,
-    AgentReadiness,
-    AgentEntry,
-    AgentHandle,
+)
+from .agent_key import AgentKey, AgentReadiness, AgentEntry, AgentHandle
+from .agent_registry import (
     AgentRegistry,
+    AgentFactory,
     register_agent,
     register_agent_if_absent,
     get_agent_factory,
     get_registered_agent_descriptors,
     get_registered_agent_types,
     create_agent,
-    URPHost,
 )
-from .harnesses import PiURPAgent, PiRpcClient, SDKURPAgent
-from .agents import EchoAgent
-from .config_loader import (
-    load_agent_config_from_file,
-    register_agent_from_file,
-    load_all_agent_configs,
-)
+from .host import URPHost
 
 __all__ = [
-    # Core primitives
     "AgentStatus",
     "AgentDescriptor",
     "AgentContext",
@@ -53,6 +47,7 @@ __all__ = [
     "AgentEntry",
     "AgentHandle",
     "AgentRegistry",
+    "AgentFactory",
     "register_agent",
     "register_agent_if_absent",
     "get_agent_factory",
@@ -60,13 +55,4 @@ __all__ = [
     "get_registered_agent_types",
     "create_agent",
     "URPHost",
-    # Harnesses & Agents
-    "PiURPAgent",
-    "PiRpcClient",
-    "SDKURPAgent",
-    "EchoAgent",
-    # Config loader
-    "load_agent_config_from_file",
-    "register_agent_from_file",
-    "load_all_agent_configs",
 ]

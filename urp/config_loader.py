@@ -13,12 +13,9 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
-from .abstract_urp import AbstractURPAgent
-from .agent_registry import register_agent, register_agent_if_absent
-from .data_types import AgentDescriptor
-from .sample_agent import EchoAgent
-from .sdk_agent import SDKURPAgent
-from .pi_harness import PiURPAgent
+from urp.core import AbstractURPAgent, AgentDescriptor, register_agent, register_agent_if_absent
+from urp.agents import EchoAgent
+from urp.harnesses import SDKURPAgent, PiURPAgent
 
 logger = logging.getLogger("urp.config_loader")
 

@@ -61,19 +61,36 @@ unified-runtime-primitive/
 ├── README.md                   # High-level conceptual architecture and specification
 ├── AGENTS.md                   # Agent & developer operational map (this document)
 ├── .agents/                    # Progressive disclosure deep-dive documentation
+├── configs/
+│   └── agents/                 # JSON agent definitions (pi_agent.json, sdk_agent.json, echo_agent.json)
 ├── urp/
 │   ├── __init__.py             # Public module exports
-│   ├── abstract_urp.py         # AbstractURPAgent base class & core lifecycle execution loop
-│   ├── data_types.py           # Pydantic data models (Descriptor, Context, State, Envelope, Result)
-│   ├── agent_key.py            # AgentKey, AgentReadiness, AgentEntry, and AgentHandle
-│   ├── agent_registry.py       # Global & instance-based AgentRegistry with create hooks
-│   ├── host.py                 # URPHost runtime host kernel
-│   ├── sample_agent.py         # EchoAgent reference demonstration
-│   ├── sdk_agent.py            # SDKURPAgent wrapping OpenHands SDK (Terminal & FileEditor tools)
-│   └── web_server.py           # FastAPI + WebSocket interactive hosting console
+│   ├── config_loader.py        # Dynamic JSON agent configuration loader
+│   ├── core/                   # Pure URP runtime primitives (no external engine dependencies)
+│   │   ├── __init__.py
+│   │   ├── abstract_urp.py     # AbstractURPAgent base class & core lifecycle execution loop
+│   │   ├── data_types.py       # Pydantic data models (Descriptor, Context, State, Envelope, Result)
+│   │   ├── agent_key.py        # AgentKey, AgentReadiness, AgentEntry, and AgentHandle
+│   │   ├── agent_registry.py   # Global & instance-based AgentRegistry with create hooks
+│   │   └── host.py             # URPHost runtime host kernel
+│   ├── harnesses/              # Pluggable execution engine adapters
+│   │   ├── openhands/          # OpenHands SDK wrapper (SDKURPAgent)
+│   │   └── pi/                 # Pi coding agent harness (PiURPAgent, PiRpcClient)
+│   ├── agents/                 # Reference agent implementations (EchoAgent)
+│   └── web/                    # Modular FastAPI & WebSocket hosting server
+│       ├── app.py              # Application factory and lifespan handler
+│       ├── routes.py           # REST endpoints and WebSocket stream
+│       ├── schemas.py          # Request and response models
+│       ├── agent_service.py    # URPHost lifecycle and registry coordination
+│       ├── workspace_service.py# Session persistence and directory browser
+│       └── templates/          # HTML5/CSS/JS dark-theme dashboard
 └── tests/
     ├── test_basic.py           # Basic agent lifecycle and state transition unit tests
-    └── test_host.py            # URPHost integration tests
+    ├── test_host.py            # URPHost integration tests
+    ├── test_config_loader.py   # JSON configuration loader tests
+    ├── test_web_server.py      # REST API and web console integration tests
+    ├── test_pi_rpc_integration.py # Pi JSON-RPC client integration tests
+    └── test_pi_urp_agent_integration.py # PiURPAgent integration tests
 ```
 
 ---

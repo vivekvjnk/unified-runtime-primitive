@@ -21,8 +21,8 @@ from openhands.sdk.conversation.state import (
 from openhands.tools.file_editor import FileEditorTool
 from openhands.tools.terminal import TerminalTool
 
-from .abstract_urp import AbstractURPAgent
-from .data_types import (
+from urp.core import (
+    AbstractURPAgent,
     AgentDescriptor,
     MessageEnvelope,
     ProcessResult,

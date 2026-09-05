@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from ..abstract_urp import AbstractURPAgent
-from ..data_types import (
+from urp.core import (
+    AbstractURPAgent,
     AgentDescriptor,
     AgentContext,
     FailureCategory,

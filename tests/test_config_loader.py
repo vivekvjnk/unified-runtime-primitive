@@ -8,9 +8,8 @@ from urp.config_loader import (
     register_agent_from_file,
     load_all_agent_configs,
 )
-from urp.agent_registry import get_agent_factory, create_agent
-from urp.pi_harness import PiURPAgent
-from urp.data_types import AgentContext
+from urp.core import get_agent_factory, create_agent, AgentContext
+from urp.harnesses.pi import PiURPAgent
 
 def test_load_pi_agent_config():
     config_path = Path("configs/agents/pi_agent.json")

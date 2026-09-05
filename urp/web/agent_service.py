@@ -4,19 +4,20 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from ..agent_registry import (
+from urp.core import (
     create_agent,
     get_agent_factory,
     get_registered_agent_descriptors,
     get_registered_agent_types,
     register_agent_if_absent,
+    AgentContext,
+    AgentDescriptor,
+    MessageEnvelope,
+    URPHost,
 )
 from ..config_loader import load_all_agent_configs
-from ..data_types import AgentContext, AgentDescriptor, MessageEnvelope
-from ..host import URPHost
-from ..sample_agent import EchoAgent
-from ..sdk_agent import SDKURPAgent
-from ..pi_harness import PiURPAgent
+from urp.agents import EchoAgent
+from urp.harnesses import SDKURPAgent, PiURPAgent
 
 logger = logging.getLogger("urp.web.agent_service")
 

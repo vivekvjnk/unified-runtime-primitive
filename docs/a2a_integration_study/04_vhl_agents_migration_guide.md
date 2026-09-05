@@ -127,21 +127,34 @@ return ProcessResult(
 
 ---
 
-## 5. Backward Compatibility Guarantees
+## 5. Architectural Directory Reorganization & Import Changes
 
-To ensure that existing VHL supervisor controllers or legacy tests do not break during gradual migration:
+As part of the clean separation of concerns, `urp-core` has eliminated flat root pollution and removed legacy backward-compatibility bridges. All imports have moved to dedicated sub-packages:
 
-1. **`ProcessResult.payload.text` Compatibility Validator:**
-   `ProcessResult` in `urp-core` includes a Pydantic model validator that automatically populates `.payload = ProcessResultPayload(text=self.text)` whenever `text` is passed, and conversely sets `.text = payload.text` if legacy code passes `payload=ProcessResultPayload(...)`.
-2. **`AgentContext` Dynamic Kwargs:**
-   `AgentContext` sets `extra="allow"` and retains `workspace_handle`, `tool_registry`, `llm_adapter`, and `persistent_memory_handle` so legacy constructor calls remain 100% valid.
+### Import Mapping Matrix:
+
+| Legacy Import Path | New Standard Import Path in `urp-core` |
+|---|---|
+| `from urp.data_types import ...` | `from urp.core import ...` (or `from urp.core.data_types import ...`) |
+| `from urp.abstract_urp import ...` | `from urp.core import AbstractURPAgent, ...` (or `from urp.core.abstract_urp import ...`) |
+| `from urp.agent_key import ...` | `from urp.core import AgentKey, AgentReadiness, AgentHandle` |
+| `from urp.agent_registry import ...` | `from urp.core import AgentRegistry, register_agent, create_agent` |
+| `from urp.host import URPHost` | `from urp.core import URPHost` |
+| `from urp.sdk_agent import SDKURPAgent` | `from urp.harnesses.openhands import SDKURPAgent` |
+| `from urp.pi_harness import PiURPAgent` | `from urp.harnesses.pi import PiURPAgent, PiRpcClient` |
+| `from urp.sample_agent import EchoAgent` | `from urp.agents import EchoAgent` |
+| `from urp.web_server import app` | `from urp.web import app` |
+
+*Note: For convenience, all public symbols are also directly importable from the top-level package:*  
+`from urp import AbstractURPAgent, AgentDescriptor, MessageEnvelope, ProcessResult, PiURPAgent, SDKURPAgent, URPHost`
 
 ---
 
 ## 6. Verification Checklist for VHL Agents Migration
 
-- [ ] Update `vhl_common/urp/data_types.py` to re-export updated `urp-core` models.
+- [ ] Update `vhl_common/urp/` imports to point to `urp.core` instead of legacy flat paths.
 - [ ] In `ArchyURPAgent.process()`, update `ProcessResult` to use `text=` and `artifacts=`.
 - [ ] In `AnaURPAgent.process()`, update `ProcessResult` to use `text=` and `artifacts=`.
 - [ ] In `LibrarianURPAgent.process()`, update `ProcessResult` to use `text=` and `artifacts=`.
+- [ ] Update any OpenHands SDK references to import from `urp.harnesses.openhands`.
 - [ ] Verify that all agent test suites pass without warnings.

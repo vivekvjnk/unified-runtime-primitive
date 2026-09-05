@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import pytest
 
-from urp.data_types import (
+from urp.core import (
     AgentDescriptor,
     AgentContext,
     AgentStatus,
@@ -12,7 +12,7 @@ from urp.data_types import (
     FailureCategory,
     ProcessResult,
 )
-from urp.pi_harness import (
+from urp.harnesses.pi import (
     PiURPAgent,
     PiRpcClient,
 )

@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import pytest
 
-from urp.pi_harness import (
+from urp.harnesses.pi import (
     PiRpcClient,
     PiRpcError,
     PiRpcConnectionError,
