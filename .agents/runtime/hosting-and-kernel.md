@@ -47,7 +47,6 @@ This document describes the host runtime kernel (`urp.host.URPHost`), the indepe
 | `/agent/init` | `POST` | Initializes and starts an agent instance with specified workspace path. |
 | `/agent/message` | `POST` | Ingests a new message into the active agent mailbox. |
 | `/agent/state` | `GET` | Returns current serialized state (`status`, `session_id`, `mailbox_size`, `last_process_result`). |
-| `/agent/acknowledge` | `POST` | Calls `acknowledge_outcome()` on the running agent to unblock next message processing. |
 | `/agent/conversations` | `GET` | Lists persistent conversation sessions saved in `.conversation/conversation_map.json`. |
 | `/agent/conversations/save` | `POST` | Persists the active conversation ID under a human-readable name. |
 | `/agent/browse` | `GET` | Directory browser endpoint for selecting workspace paths from the web UI. |

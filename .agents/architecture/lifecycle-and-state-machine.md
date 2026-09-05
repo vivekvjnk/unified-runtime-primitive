@@ -61,11 +61,6 @@ When `start()` is invoked, an asynchronous background task `_lifecycle_loop()` i
                                            │
                                            ▼
                ┌────────────────────────────────────────────────────────┐
-               │    Guard: Wait until outcome_acknowledged == True      │
-               └───────────────────────────┬────────────────────────────┘
-                                           │
-                                           ▼
-               ┌────────────────────────────────────────────────────────┐
                │    mailbox.get() (0.5s poll timeout check)             │
                └───────────────────────────┬────────────────────────────┘
                                            │
@@ -97,7 +92,7 @@ When `start()` is invoked, an asynchronous background task `_lifecycle_loop()` i
                        │                        │                        │
                        ▼                        ▼                        ▼
                ┌──────────────────────────────────────────────────────────────────┐
-               │       outcome_acknowledged = False; mailbox.task_done()          │
+               │                      mailbox.task_done()                         │
                └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -127,21 +122,7 @@ URP incorporates deterministic contract verification around every task execution
 
 ---
 
-## 4. Outcome Acknowledgment Contract
-
-To prevent fast producers from overwhelming agent workflows or dropping critical failure signals, URP implements an explicit **Outcome Acknowledgment Handshake**:
-
-1. When a task completes (or fails), `_state.outcome_acknowledged` is set to `False`.
-2. The agent will **not** consume subsequent messages from its mailbox while `outcome_acknowledged == False`.
-3. The supervisory orchestrator (or host system) inspects the outcome and invokes:
-   ```python
-   agent.acknowledge_outcome()
-   ```
-4. `outcome_acknowledged` resets to `True`, allowing the lifecycle loop to unblock and dequeue the next pending message.
-
----
-
-## 5. Failure Categorization
+## 4. Failure Categorization
 
 All task failures are categorized using `FailureCategory` (`urp.data_types`):
 

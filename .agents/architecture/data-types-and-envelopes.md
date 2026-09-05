@@ -68,7 +68,6 @@ class AgentState(BaseModel):
     session_id: str                        # UUID string tracking conversational session
     status: AgentStatus = AgentStatus.INITIALIZED
     last_process_result: ProcessResult | None = None
-    outcome_acknowledged: bool = True      # Flow-control guard for orchestrators
     internal_memory: Dict[str, Any] = Field(default_factory=dict)
 ```
 

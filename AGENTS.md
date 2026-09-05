@@ -18,8 +18,7 @@ Welcome to the **`urp-core`** codebase. This document serves as the top-level ar
 2. **Mailbox-Driven Invocation:** External systems never invoke `process()` or mutate internal memory directly; all inbound inputs pass through `send(MessageEnvelope)`.
 3. **Emit-Only Dispatches:** All outputs, intermediate progress signals, and final task outcomes exit strictly via `emit(MessageEnvelope)` callbacks.
 4. **Deterministic Pre/Postcondition Gates:** `_check_preconditions()` and `_check_postconditions()` run deterministically around the execution loop, safeguarding invariant compliance and categorizing failures (`FailureCategory`).
-5. **Outcome Acknowledgment Handshake:** After a task completes, the agent halts further mailbox queue consumption until the supervisory orchestrator calls `acknowledge_outcome()`.
-6. **Encapsulated Handles:** Supervisory schedulers interact with agents via `AgentHandle` and evaluate system-level `AgentReadiness` without leaking internal execution details.
+5. **Encapsulated Handles:** Supervisory schedulers interact with agents via `AgentHandle` and evaluate system-level `AgentReadiness` without leaking internal execution details.
 
 ---
 
@@ -109,6 +108,5 @@ For complete code examples, see [`.agents/guides/authoring-agents.md`](.agents/g
 When working on this repository, autonomous agents must adhere to the following rules:
 
 1. **Preserve ABI Boundaries:** Do not expose `AbstractURPAgent` internals directly to external callers; interact through `MessageEnvelope` or `AgentHandle`.
-2. **Respect Outcome Acknowledgment:** Any orchestration or host loop code interacting with agents must observe `outcome_acknowledged` flow control.
-3. **Maintain Pydantic Schemas:** Ensure all modifications to envelopes or state models in `urp/data_types.py` maintain backward compatibility and JSON serializability.
-4. **Update Progressive Documentation:** Whenever state machine semantics, registry APIs, or kernel bindings change, update the corresponding deep-dive documentation in `.agents/`.
+2. **Maintain Pydantic Schemas:** Ensure all modifications to envelopes or state models in `urp/data_types.py` maintain backward compatibility and JSON serializability.
+3. **Update Progressive Documentation:** Whenever state machine semantics, registry APIs, or kernel bindings change, update the corresponding deep-dive documentation in `.agents/`.

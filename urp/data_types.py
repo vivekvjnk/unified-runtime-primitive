@@ -67,7 +67,6 @@ class AgentState(BaseModel):
     status: AgentStatus = AgentStatus.INITIALIZED
     # Execution outcome of last processed message
     last_process_result: ProcessResult | None = None
-    outcome_acknowledged: bool = True
     internal_memory: Dict[str, Any] = Field(default_factory=dict)
         
 class AgentContext(BaseModel):

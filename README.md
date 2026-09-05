@@ -78,7 +78,7 @@ URP divides multi-agent system architecture into two non-leaking layers:
 The outer orchestration layer (or host runtime) sees every agent purely as an addressable, event-emitting state machine. It interacts strictly via:
 * **Asynchronous Mailboxes (`MessageEnvelope`):** Sending typed messages without directly accessing internal state or call stacks.
 * **Decoupled Inspection (`AgentHandle` & `AgentReadiness`):** Querying external readiness and lifecycle status without mutating state.
-* **Outcome Acknowledgment:** Explicitly acknowledging task completion or failure before subsequent message processing cycles proceed.
+* **Asynchronous Event Streaming:** Consuming emitted lifecycle events, intermediate progress reports, and final task outcomes.
 
 ### Below the URP Boundary (The Agent Execution Engine)
 
@@ -131,7 +131,6 @@ Tracks agent runtime progression across its formal state machine:
 * `AgentStatus`: `UNINITIALIZED` $\rightarrow$ `INITIALIZED` $\rightarrow$ `WAITING` $\rightleftharpoons$ `PROCESSING` $\rightarrow$ `TERMINATED` (or `ERROR`).
 * `session_id`: Unique identifier for the persistent conversation/session.
 * `last_process_result`: The outcome of the most recent message processing cycle.
-* `outcome_acknowledged`: Boolean guard ensuring outer orchestrators have consumed the previous result before processing next queue items.
 
 ### 3.4 Messaging & Event Envelope: `MessageEnvelope`
 Universal vehicle for all inputs and outputs across the boundary:
@@ -172,7 +171,6 @@ Every `AbstractURPAgent` adheres to a verified execution lifecycle with built-in
     └── Pushes MessageEnvelope to asyncio.Queue mailbox
 
  4. _lifecycle_loop() [Continuous State Machine]
-    ├── Wait for outcome_acknowledged == True
     ├── message = await mailbox.get()
     ├── Gate 1: _check_preconditions(message)
     │   └── Fail -> Emit TASK_PRECONDITIONS_VIOLATED & return to WAITING

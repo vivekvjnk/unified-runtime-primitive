@@ -199,9 +199,6 @@ async def get_index():
             </div>
 
             <div class="status" id="status">Agent Status: Starting...</div>
-            <div id="ackArea" style="display:none; margin-bottom: 10px; padding: 10px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px;">
-                Task outcome pending! <button onclick="acknowledge()">Acknowledge Outcome</button>
-            </div>
             <div id="console"></div>
             <div class="input-area">
                 <input type="text" id="messageInput" placeholder="Enter message to agent...">
@@ -211,7 +208,6 @@ async def get_index():
             <script>
                 const consoleDiv = document.getElementById('console');
                 const statusDiv = document.getElementById('status');
-                const ackArea = document.getElementById('ackArea');
                 
                 function addLog(msg, type='event') {
                     const div = document.createElement('div');
@@ -225,12 +221,6 @@ async def get_index():
                     const res = await fetch('/agent/state');
                     const state = await res.json();
                     statusDiv.textContent = `Agent Status: ${state.status} | Mailbox: ${state.mailbox_size}`;
-                    
-                    if (state.outcome_acknowledged === false) {
-                        ackArea.style.display = 'block';
-                    } else {
-                        ackArea.style.display = 'none';
-                    }
 
                     // Update agent UI visibility based on type
                     const agentType = document.getElementById('agentType').value;
@@ -356,12 +346,6 @@ async def get_index():
                     input.value = '';
                 }
 
-                async function acknowledge() {
-                    addLog('Acknowledging task outcome...', 'message');
-                    const res = await fetch('/agent/acknowledge', { method: 'POST' });
-                    updateStatus();
-                }
-
                 // WebSocket for real-time events
                 const ws = new WebSocket(`ws://${window.location.host}/ws`);
                 ws.onmessage = function(event) {
@@ -400,13 +384,6 @@ async def get_state():
         if hasattr(state["last_process_result"], "model_dump"):
             state["last_process_result"] = state["last_process_result"].model_dump(mode='json')
     return state
-
-@app.post("/agent/acknowledge")
-async def acknowledge_outcome():
-    if host.agent:
-        host.agent.acknowledge_outcome()
-        return {"status": "acknowledged"}
-    return {"status": "error", "message": "Agent not running"}
 
 @app.get("/agent/browse")
 async def browse_directory(path: str = "."):
