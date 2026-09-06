@@ -277,8 +277,9 @@ class AgentHostingService:
             "\n\n## Collaborative Agent2Agent (A2A) Network\n"
             "You are operating within a multi-agent A2A network. The following peer agents are available:\n"
             + "\n".join(lines) +
-            "\n\nYou can delegate tasks to any peer agent by executing the `a2a_peer_call` tool via bash:\n"
+            "\n\nYou can delegate tasks to any peer agent using the `a2a_peer_call` tool bundled in the `a2a-peer-dialing` ECP skill (`tools/a2a_peer_call`):\n"
             "  a2a_peer_call --peer <peer_agent_name> --message \"<clear request>\"\n"
+            "(Path: .agents/skills/a2a-peer-dialing/tools/a2a_peer_call or tools/a2a_peer_call)\n"
         )
 
     def list_running_agents(self) -> List[Dict[str, Any]]:
