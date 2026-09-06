@@ -22,6 +22,7 @@ from urp.a2a.models import (
     TaskStatusUpdateEvent,
 )
 from urp.a2a.translator import A2ATranslator
+from urp.a2a.client import A2APeerClient, a2a_call_peer
 
 __all__ = [
     "AgentCapabilities",
@@ -44,4 +45,6 @@ __all__ = [
     "TaskStatus",
     "TaskStatusUpdateEvent",
     "A2ATranslator",
+    "A2APeerClient",
+    "a2a_call_peer",
 ]

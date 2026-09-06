@@ -255,8 +255,50 @@ class AgentHostingService:
             raise KeyError(f"No running agent host found for '{agent_name}'. Running: {list(self.hosts.keys())}")
         self.active_agent_name = norm_name
 
+    def get_peer_roster_description(self, current_agent_name: str) -> str:
+        """Generates a text block describing all available peer agents in the container."""
+        lines = []
+        for name, host in self.hosts.items():
+            if name == current_agent_name:
+                continue
+            desc = host.descriptor.description if host.descriptor else ""
+            caps = ", ".join(host.descriptor.capabilities) if host.descriptor else ""
+            lines.append(f"- {name}: {desc} (Capabilities: {caps})")
+
+        # Also add registered agent types not yet running
+        for name, desc in get_registered_agent_types().items():
+            if name != current_agent_name and name not in self.hosts:
+                lines.append(f"- {name}: {desc.description} (Capabilities: {', '.join(desc.capabilities)})")
+
+        if not lines:
+            return ""
+
+        return (
+            "\n\n## Collaborative Agent2Agent (A2A) Network\n"
+            "You are operating within a multi-agent A2A network. The following peer agents are available:\n"
+            + "\n".join(lines) +
+            "\n\nYou can delegate tasks to any peer agent by executing the `a2a_peer_call` tool via bash:\n"
+            "  a2a_peer_call --peer <peer_agent_name> --message \"<clear request>\"\n"
+        )
+
     def list_running_agents(self) -> List[Dict[str, Any]]:
         """Returns metadata and status for all currently running agent hosts."""
+        result = []
+        for name, host in self.hosts.items():
+            status_val = "OFFLINE"
+            if host.agent and hasattr(host.agent, "state"):
+                st = host.agent.state.get("status")
+                status_val = st.value if hasattr(st, "value") else str(st)
+
+            result.append({
+                "agent_name": name,
+                "agent_id": host.descriptor.agent_id if host.descriptor else name,
+                "status": status_val,
+                "is_active": (name == self.active_agent_name),
+                "description": host.descriptor.description if host.descriptor else "",
+                "capabilities": host.descriptor.capabilities if host.descriptor else [],
+            })
+        return result
         result = []
         for name, host in self.hosts.items():
             status_val = "OFFLINE"
@@ -334,6 +376,13 @@ class AgentHostingService:
         agent_config = dict(default_cfg)
         if configuration:
             agent_config.update(configuration)
+
+        # Inject A2A peer roster description into system prompt so the agent knows its peers
+        peer_roster = self.get_peer_roster_description(norm_agent_name)
+        if peer_roster:
+            existing_prompt = agent_config.get("system_prompt", "")
+            if "## Collaborative Agent2Agent" not in existing_prompt:
+                agent_config["system_prompt"] = (existing_prompt + "\n" + peer_roster).strip()
 
         agent_config["workspace_path"] = self.workspace_path
         agent_config["workspace_dir"] = self.workspace_path
