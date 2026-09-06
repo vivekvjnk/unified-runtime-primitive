@@ -256,7 +256,9 @@ class AbstractURPAgent(ABC):
                         payload=self._state.last_process_result,
                         sender=self.descriptor.agent_id,
                         correlation_id=message.correlation_id,
-                        message_id=message.message_id
+                        message_id=message.message_id,
+                        context_id=message.context_id,
+                        task_id=message.task_id,
                     ))
                         
                 except PostconditionsViolatedError as e:
@@ -277,7 +279,9 @@ class AbstractURPAgent(ABC):
                         payload=self._state.last_process_result,
                         sender=self.descriptor.agent_id,
                         message_id=message.message_id,
-                        correlation_id=message.correlation_id
+                        correlation_id=message.correlation_id,
+                        context_id=message.context_id,
+                        task_id=message.task_id,
                     ))
                 except PreconditionsViolatedError as e:
                     logger.warning(f"[{self.descriptor.agent_id}] Preconditions violated for Msg ID {message.message_id}: {str(e)}")
@@ -290,7 +294,9 @@ class AbstractURPAgent(ABC):
                         payload=self._state.last_process_result,
                         sender=self.descriptor.agent_id,
                         message_id=message.message_id,
-                        correlation_id=message.correlation_id
+                        correlation_id=message.correlation_id,
+                        context_id=message.context_id,
+                        task_id=message.task_id,
                     ))
 
                 except Exception as e:
@@ -304,7 +310,9 @@ class AbstractURPAgent(ABC):
                         payload=self._state.last_process_result,
                         sender=self.descriptor.agent_id,
                         message_id=message.message_id,
-                        correlation_id=message.correlation_id
+                        correlation_id=message.correlation_id,
+                        context_id=message.context_id,
+                        task_id=message.task_id,
                     ))
                 finally:
                     logger.debug(f"[{self.descriptor.agent_id}] Marking mailbox task done for Msg ID: {message.message_id}")

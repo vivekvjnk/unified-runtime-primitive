@@ -16,7 +16,19 @@ class URPHost:
         self.descriptor = descriptor
         self.agent: Optional[AbstractURPAgent] = None
         self.event_queue: asyncio.Queue[MessageEnvelope] = asyncio.Queue()
+        self._listeners: list[asyncio.Queue[MessageEnvelope]] = []
         self._emit_callback: Optional[Callable[[MessageEnvelope], Any]] = None
+
+    def add_listener(self) -> asyncio.Queue[MessageEnvelope]:
+        """Creates and registers a new subscriber queue for emitted events."""
+        q: asyncio.Queue[MessageEnvelope] = asyncio.Queue()
+        self._listeners.append(q)
+        return q
+
+    def remove_listener(self, q: asyncio.Queue[MessageEnvelope]) -> None:
+        """Removes a registered subscriber queue."""
+        if q in self._listeners:
+            self._listeners.remove(q)
 
     def set_emit_callback(self, callback: Callable[[MessageEnvelope], Any]):
         """Sets a callback for events emitted by the agent."""
@@ -27,6 +39,10 @@ class URPHost:
         logger.debug(f"[URPHost] Agent emitted event: {event.type}")
         # Put in local queue for polling/streaming
         await self.event_queue.put(event)
+
+        # Broadcast to all registered listener queues
+        for q in list(self._listeners):
+            await q.put(event)
         
         # Call external callback if provided
         if self._emit_callback:

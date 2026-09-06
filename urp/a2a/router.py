@@ -133,39 +133,47 @@ async def send_message_sync(req: SendMessageRequest, request: Request):
     # Wait for completion via event loop polling
     timeout = 120.0
     start_time = asyncio.get_running_loop().time()
+    host_listener = service.host.add_listener()
 
-    while True:
-        if (asyncio.get_running_loop().time() - start_time) > timeout:
-            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Agent execution timed out")
+    try:
+        while True:
+            if (asyncio.get_running_loop().time() - start_time) > timeout:
+                raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Agent execution timed out")
 
-        updated_task = await task_manager.get_task(tid)
-        if updated_task and updated_task.status.state in (
-            TaskState.TASK_STATE_COMPLETED,
-            TaskState.TASK_STATE_FAILED,
-            TaskState.TASK_STATE_CANCELED,
-            TaskState.TASK_STATE_INPUT_REQUIRED,
-        ):
-            return SendMessageResponse(task=updated_task)
+            updated_task = await task_manager.get_task(tid)
+            if updated_task and updated_task.status.state in (
+                TaskState.TASK_STATE_COMPLETED,
+                TaskState.TASK_STATE_FAILED,
+                TaskState.TASK_STATE_CANCELED,
+                TaskState.TASK_STATE_INPUT_REQUIRED,
+            ):
+                return SendMessageResponse(task=updated_task)
 
-        # Check latest host events
-        try:
-            event = await service.host.get_next_event(timeout=0.2)
-            stream_resp = A2ATranslator.envelope_to_stream_response(event)
-            if stream_resp and stream_resp.status_update:
-                su = stream_resp.status_update
-                updated = await task_manager.update_task_status(
-                    task_id=tid,
-                    state=su.status.state,
-                    message=su.status.message,
-                    metadata=su.metadata,
-                )
-                if su.status.state in (
-                    TaskState.TASK_STATE_COMPLETED,
-                    TaskState.TASK_STATE_FAILED,
-                ):
-                    return SendMessageResponse(task=updated)
-        except asyncio.TimeoutError:
-            pass
+            # Check latest host events from registered listener
+            try:
+                event = await asyncio.wait_for(host_listener.get(), timeout=0.2)
+                if event.task_id and event.task_id != tid:
+                    continue
+
+                stream_resp = A2ATranslator.envelope_to_stream_response(event)
+                if stream_resp and stream_resp.status_update:
+                    su = stream_resp.status_update
+                    updated = await task_manager.update_task_status(
+                        task_id=tid,
+                        state=su.status.state,
+                        message=su.status.message,
+                        metadata=su.metadata,
+                    )
+                    if su.status.state in (
+                        TaskState.TASK_STATE_COMPLETED,
+                        TaskState.TASK_STATE_FAILED,
+                    ):
+                        return SendMessageResponse(task=updated)
+            except asyncio.TimeoutError:
+                pass
+    finally:
+        if service.host:
+            service.host.remove_listener(host_listener)
 
 
 # ---------------------------------------------------------------------------
@@ -202,39 +210,49 @@ async def send_message_stream(req: SendMessageRequest, request: Request):
     envelope.streaming = True
 
     # 4. Background consumer pulling from URPHost and feeding task_manager
+    host_listener = service.host.add_listener()
+
     async def bridge_host_events():
-        while True:
-            try:
-                evt = await service.host.get_next_event(timeout=0.5)
-                # Ensure context_id and task_id match
-                if not evt.task_id:
-                    evt.task_id = tid
-                if not evt.context_id:
-                    evt.context_id = cid
+        try:
+            while True:
+                try:
+                    evt = await asyncio.wait_for(host_listener.get(), timeout=0.5)
+                    # Filter events: if event has a task_id and it belongs to another task, ignore
+                    if evt.task_id and evt.task_id != tid:
+                        continue
 
-                stream_resp = A2ATranslator.envelope_to_stream_response(evt)
-                if stream_resp:
-                    if stream_resp.status_update:
-                        su = stream_resp.status_update
-                        await task_manager.update_task_status(
-                            task_id=tid,
-                            state=su.status.state,
-                            message=su.status.message,
-                            metadata=su.metadata,
-                        )
-                    else:
-                        await task_manager.publish_event(tid, stream_resp)
+                    # Anchor IDs to this task if absent
+                    if not evt.task_id:
+                        evt.task_id = tid
+                    if not evt.context_id:
+                        evt.context_id = cid
 
-                if evt.type in ("TASK_COMPLETED", "TASK_FAILED", "TASK_PRECONDITIONS_VIOLATED", "TASK_POSTCONDITIONS_VIOLATED"):
+                    stream_resp = A2ATranslator.envelope_to_stream_response(evt)
+                    if stream_resp:
+                        if stream_resp.status_update:
+                            su = stream_resp.status_update
+                            await task_manager.update_task_status(
+                                task_id=tid,
+                                state=su.status.state,
+                                message=su.status.message,
+                                metadata=su.metadata,
+                            )
+                        else:
+                            await task_manager.publish_event(tid, stream_resp)
+
+                    if evt.type in ("TASK_COMPLETED", "TASK_FAILED", "TASK_PRECONDITIONS_VIOLATED", "TASK_POSTCONDITIONS_VIOLATED"):
+                        break
+                except asyncio.TimeoutError:
+                    # Check if task already terminated
+                    t = await task_manager.get_task(tid)
+                    if t and t.status.state in (TaskState.TASK_STATE_COMPLETED, TaskState.TASK_STATE_FAILED, TaskState.TASK_STATE_CANCELED):
+                        break
+                except Exception as e:
+                    logger.error(f"Error bridging host events: {e}")
                     break
-            except asyncio.TimeoutError:
-                # Check if task already terminated
-                t = await task_manager.get_task(tid)
-                if t and t.status.state in (TaskState.TASK_STATE_COMPLETED, TaskState.TASK_STATE_FAILED, TaskState.TASK_STATE_CANCELED):
-                    break
-            except Exception as e:
-                logger.error(f"Error bridging host events: {e}")
-                break
+        finally:
+            if service.host:
+                service.host.remove_listener(host_listener)
 
     # Dispatch envelope and launch event bridge
     await service.host.agent.send(envelope)
