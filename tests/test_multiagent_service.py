@@ -102,6 +102,15 @@ async def test_workspace_well_known_autodetection(temp_workspace):
     assert "tiny_infra_ops" in registered
     assert registered["tiny_infra_ops"].capabilities == ["DOCKER", "YOCTO"]
 
+    # Test deploying the autodetected agent
+    host = await service.initialize_agent(
+        agent_type="tiny_infra_ops",
+        workspace_path=temp_workspace,
+        agent_name="tiny_infra_ops",
+    )
+    assert host is not None
+    assert host.descriptor.name == "tiny_infra_ops"
+
     await service.shutdown()
 
 

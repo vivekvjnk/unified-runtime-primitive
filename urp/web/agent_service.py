@@ -79,7 +79,7 @@ class AgentHostingService:
             )
             register_agent_if_absent(
                 name="echo_agent",
-                factory_func=lambda descriptor=None: EchoAgent(descriptor=descriptor or desc),
+                factory_func=lambda descriptor=None, **kwargs: EchoAgent(descriptor=descriptor or desc),
                 descriptor=desc,
             )
 
@@ -94,7 +94,7 @@ class AgentHostingService:
             )
             register_agent_if_absent(
                 name="sdk_agent",
-                factory_func=lambda descriptor=None: SDKURPAgent(descriptor=descriptor or desc),
+                factory_func=lambda descriptor=None, **kwargs: SDKURPAgent(descriptor=descriptor or desc),
                 descriptor=desc,
             )
 
@@ -109,7 +109,7 @@ class AgentHostingService:
             )
             register_agent_if_absent(
                 name="pi_gemini_agent",
-                factory_func=lambda descriptor=None: PiGeminiAgent(descriptor=descriptor or desc),
+                factory_func=lambda descriptor=None, **kwargs: PiGeminiAgent(descriptor=descriptor or desc),
                 descriptor=desc,
             )
 
@@ -170,7 +170,7 @@ class AgentHostingService:
                     # Default fallback harness for discovered A2A cards is PiGeminiAgent if not specified
                     register_agent_if_absent(
                         name=agent_name,
-                        factory_func=lambda d=None, bound_desc=descriptor: PiGeminiAgent(descriptor=d or bound_desc),
+                        factory_func=lambda descriptor=None, bound_desc=descriptor, **kwargs: PiGeminiAgent(descriptor=descriptor or bound_desc),
                         descriptor=descriptor,
                     )
 
