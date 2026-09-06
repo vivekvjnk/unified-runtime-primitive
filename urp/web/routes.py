@@ -1,13 +1,20 @@
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from .agent_service import AgentHostingService, normalize_agent_name
-from .schemas import InitRequest, MessageRequest, SaveConversationRequest, SwitchAgentRequest
+from .schemas import (
+    CreateAgentRequest,
+    InitRequest,
+    MessageRequest,
+    SaveConversationRequest,
+    SwitchAgentRequest,
+)
 from .workspace_service import (
     browse_filesystem,
     list_workspace_conversations,
@@ -15,6 +22,7 @@ from .workspace_service import (
     save_workspace_conversation,
 )
 from .pi_log_parser import parse_pi_session_log
+from .ecp_service import validate_and_extract_ecp
 
 router = APIRouter()
 service = AgentHostingService()
@@ -109,6 +117,74 @@ async def switch_active_agent(req: SwitchAgentRequest):
 async def scan_workspace_agents(path: str = "."):
     """Scans <workspace_path>/.well_known/<agent_name>.json for A2A Agent Cards."""
     return service.scan_workspace_well_known_agents(path)
+
+
+@router.post("/agent/create")
+async def create_agent_endpoint(
+    agent_name: str = Form(...),
+    workspace_path: str = Form("./agent_workspace"),
+    description: Optional[str] = Form(None),
+    system_prompt: Optional[str] = Form(None),
+    harness: str = Form("pi"),
+    model: str = Form("gemini-3.8-flash"),
+    provider: str = Form("google-vertex"),
+    thinking_level: str = Form("medium"),
+    ecp_dir: Optional[str] = Form(None),
+    ecp_file: Optional[UploadFile] = File(None),
+):
+    """
+    Authoring endpoint: Configures, persists, and launches a new URP agent.
+    Supports injecting an ECP (Engineering Capability Package) from a zip archive or local directory.
+    """
+    norm_name = normalize_agent_name(agent_name)
+    extracted_skills = []
+    capabilities = ["READ", "BASH", "EDIT", "WRITE", "SKILLS"]
+
+    # Ingest ECP if provided
+    if ecp_file:
+        file_bytes = await ecp_file.read()
+        pkg_name = Path(ecp_file.filename).stem if ecp_file.filename else None
+        skill_info = validate_and_extract_ecp(
+            workspace_path=workspace_path,
+            archive_bytes=file_bytes,
+            package_name=pkg_name,
+        )
+        extracted_skills.append(skill_info)
+        capabilities.append(skill_info["skill_name"].upper().replace("-", "_"))
+    elif ecp_dir and ecp_dir.strip():
+        skill_info = validate_and_extract_ecp(
+            workspace_path=workspace_path,
+            source_dir=ecp_dir.strip(),
+        )
+        extracted_skills.append(skill_info)
+        capabilities.append(skill_info["skill_name"].upper().replace("-", "_"))
+
+    try:
+        host = await service.create_and_register_agent(
+            agent_name=norm_name,
+            workspace_path=workspace_path,
+            description=description,
+            system_prompt=system_prompt,
+            harness=harness,
+            model=model,
+            provider=provider,
+            thinking_level=thinking_level,
+            capabilities=capabilities,
+            persist_config=False,  # Keep repo clean; .well_known card in workspace is the source of truth
+        )
+        return {
+            "status": "created",
+            "agent_name": norm_name,
+            "agent_id": host.descriptor.agent_id,
+            "harness": harness,
+            "workspace_path": os.path.abspath(workspace_path),
+            "well_known_card": str(Path(workspace_path).resolve() / ".well_known" / f"{norm_name}.json"),
+            "extracted_skills": extracted_skills,
+            "active_agent_name": service.active_agent_name,
+            "running_agents": service.list_running_agents(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to create agent: {str(e)}")
 
 
 @router.post("/agent/init")

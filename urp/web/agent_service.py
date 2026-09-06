@@ -417,6 +417,96 @@ class AgentHostingService:
             streaming=streaming,
         )
 
+    async def create_and_register_agent(
+        self,
+        agent_name: str,
+        workspace_path: str,
+        description: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        harness: str = "pi",
+        model: str = "gemini-3.8-flash",
+        provider: str = "google-vertex",
+        thinking_level: str = "medium",
+        capabilities: Optional[List[str]] = None,
+        configuration: Optional[Dict[str, Any]] = None,
+        configs_dir: Optional[str | Path] = None,
+        persist_config: bool = True,
+    ) -> URPHost:
+        """
+        Dynamically configures, registers, persists, and launches a new URP agent.
+        1. Normalizes agent_name to underscore-separated identifier.
+        2. Generates declarative config JSON and saves to configs/agents/<agent_name>.json.
+        3. Registers in global AgentRegistry.
+        4. Initializes URPHost, runs the agent, and exports A2A Card to <workspace>/.well_known/<agent_name>.json.
+        """
+        norm_name = normalize_agent_name(agent_name)
+        abs_workspace = os.path.abspath(workspace_path)
+        os.makedirs(abs_workspace, exist_ok=True)
+
+        caps = list(capabilities or ["READ", "BASH", "EDIT", "WRITE", "SKILLS"])
+
+        agent_config: Dict[str, Any] = {
+            "provider": provider,
+            "model": model,
+            "thinking_level": thinking_level,
+            "settlement_timeout": 600,
+            "auto_compaction": True,
+            "compaction": {
+                "enabled": True,
+                "reserveTokens": 16384,
+                "keepRecentTokens": 20000,
+            },
+            "retry": {
+                "enabled": True,
+                "maxRetries": 3,
+                "baseDelayMs": 2000,
+            },
+            "tools": ["read", "bash", "edit", "write"],
+        }
+        if system_prompt:
+            agent_config["system_prompt"] = system_prompt
+        if configuration:
+            agent_config.update(configuration)
+
+        manifest = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "name": norm_name,
+            "descriptor": {
+                "agent_id": norm_name,
+                "name": norm_name,
+                "version": "1.0.0",
+                "description": description or f"Autonomous dynamic agent {norm_name}",
+                "capabilities": caps,
+                "accepted_message_types": ["MESSAGE", "TASK"],
+            },
+            "harness": harness,
+            "configuration": agent_config,
+        }
+
+        # 1. Save declarative config in configs/agents/<agent_name>.json if requested
+        if persist_config:
+            target_configs_dir = Path(configs_dir) if configs_dir else Path(__file__).resolve().parent.parent.parent / "configs" / "agents"
+            target_configs_dir.mkdir(parents=True, exist_ok=True)
+            config_file = target_configs_dir / f"{norm_name}.json"
+            with open(config_file, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2)
+            logger.info(f"[AgentService] Saved dynamic agent manifest to {config_file}")
+
+        # 2. Register into AgentRegistry
+        name, factory_func, descriptor, default_config = build_agent_from_config(manifest)
+        descriptor.metadata["default_configuration"] = default_config
+        descriptor.metadata["harness"] = harness
+        register_agent_if_absent(name=norm_name, factory_func=factory_func, descriptor=descriptor)
+
+        # 3. Initialize and start host
+        host = await self.initialize_agent(
+            agent_type=norm_name,
+            workspace_path=abs_workspace,
+            configuration=agent_config,
+            agent_name=norm_name,
+        )
+        return host
+
     async def shutdown(self, agent_name: Optional[str] = None) -> None:
         """
         Shuts down a specific agent host or all running hosts if agent_name is None.
