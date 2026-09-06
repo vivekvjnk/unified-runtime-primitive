@@ -345,3 +345,28 @@ async def test_pi_urp_agent_streaming_and_delegation(tmp_path):
     assert len(completions) == 1
 
     await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pi_urp_agent_workspace_skills_loading(tmp_path):
+    """Test 9: Verify PiURPAgent mounts skills from workspace .agents/skills and skills/ directories."""
+    # Create mock skill in workspace .agents/skills/custom_skill/SKILL.md
+    skills_dir = tmp_path / ".agents" / "skills" / "my_custom_skill"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: test\n---\n")
+
+    context = AgentContext(
+        configuration={
+            "workspace_dir": str(tmp_path),
+            "no_session": True,
+            "executable_path": FAKE_PI_SCRIPT,
+        }
+    )
+
+    agent = DummyPiURPAgent()
+    agent.initialize(context, lambda msg: None)
+
+    # Check extra_args passed to pi_client
+    extra_args = agent.pi_client.extra_args
+    assert "--skill" in extra_args
+    assert str(skills_dir) in extra_args or str(tmp_path / ".agents" / "skills") in extra_args

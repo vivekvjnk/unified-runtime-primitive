@@ -300,22 +300,6 @@ class AgentHostingService:
                 "capabilities": host.descriptor.capabilities if host.descriptor else [],
             })
         return result
-        result = []
-        for name, host in self.hosts.items():
-            status_val = "OFFLINE"
-            if host.agent and hasattr(host.agent, "state"):
-                st = host.agent.state.get("status")
-                status_val = st.value if hasattr(st, "value") else str(st)
-
-            result.append({
-                "agent_name": name,
-                "agent_id": host.descriptor.agent_id if host.descriptor else name,
-                "status": status_val,
-                "is_active": (name == self.active_agent_name),
-                "description": host.descriptor.description if host.descriptor else "",
-                "capabilities": host.descriptor.capabilities if host.descriptor else [],
-            })
-        return result
 
     async def initialize_agent(
         self,
@@ -562,6 +546,69 @@ class AgentHostingService:
             agent_name=norm_name,
         )
         return host
+
+    async def compact_context(self, agent_name: Optional[str] = None, custom_instructions: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Triggers context compaction on the target or active agent.
+        For Pi harness agents, delegates to pi_client.compact().
+        """
+        host = self.get_host(agent_name)
+        if not host or not host.agent:
+            raise RuntimeError(f"No running agent found for '{agent_name or self.active_agent_name}'")
+
+        agent = host.agent
+        if hasattr(agent, "pi_client") and agent.pi_client and agent.pi_client.is_running:
+            res = await agent.pi_client.compact(custom_instructions=custom_instructions)
+            return {
+                "status": "compacted" if res.success else "failed",
+                "agent_name": host.descriptor.name,
+                "data": res.data,
+                "error": res.error,
+            }
+        else:
+            return {
+                "status": "unsupported",
+                "message": f"Agent '{host.descriptor.name}' does not support RPC context compaction",
+            }
+
+    async def clear_conversation_history(self, workspace_path: Optional[str] = None, agent_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Deletes persistent session files from the workspace (.sessions/<agent_name> and .conversation)
+        and resets active conversation in running agents.
+        """
+        ws = os.path.abspath(workspace_path or self.workspace_path or "./agent_workspace")
+        deleted_files = []
+
+        target_name = agent_name or self.active_agent_name
+
+        # 1. Clear Pi session files in <workspace>/.sessions/<target_name>
+        if target_name:
+            norm_name = normalize_agent_name(target_name)
+            agent_sess_dir = os.path.join(ws, ".sessions", norm_name)
+            if os.path.isdir(agent_sess_dir):
+                for f in os.listdir(agent_sess_dir):
+                    fpath = os.path.join(agent_sess_dir, f)
+                    if os.path.isfile(fpath):
+                        os.remove(fpath)
+                        deleted_files.append(fpath)
+
+        # 2. Reset in-memory / RPC session if agent is running
+        host = self.get_host(target_name)
+        if host and host.agent:
+            if hasattr(host.agent, "pi_client") and host.agent.pi_client and host.agent.pi_client.is_running:
+                try:
+                    await host.agent.pi_client.new_session()
+                except Exception as e:
+                    logger.warning(f"Could not reset Pi session: {e}")
+
+        # Clear in-memory event log for this agent
+        self.event_log = [e for e in self.event_log if e.get("agent_name") != target_name]
+
+        return {
+            "status": "cleared",
+            "agent_name": target_name,
+            "deleted_files_count": len(deleted_files),
+        }
 
     async def shutdown(self, agent_name: Optional[str] = None) -> None:
         """

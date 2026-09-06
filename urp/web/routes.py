@@ -15,6 +15,8 @@ from .schemas import (
     SaveConversationRequest,
     StopAgentRequest,
     SwitchAgentRequest,
+    CompactRequest,
+    ClearHistoryRequest,
 )
 from .workspace_service import (
     browse_filesystem,
@@ -251,15 +253,15 @@ async def get_state(agent_name: Optional[str] = None):
 
 
 @router.get("/agent/conversations")
-async def list_conversations(workspace_path: str):
+async def list_conversations(workspace_path: str, agent_name: Optional[str] = None):
     """Lists saved conversation sessions in the workspace."""
-    return list_workspace_conversations(workspace_path)
+    return list_workspace_conversations(workspace_path, agent_name=agent_name)
 
 
 @router.get("/agent/conversations/history")
-async def get_conversation_history(workspace_path: str, conversation_id: str):
+async def get_conversation_history(workspace_path: str, conversation_id: str = "latest", agent_name: Optional[str] = None):
     """Reads reconstructed conversation events from the workspace."""
-    return load_conversation_history(workspace_path, conversation_id)
+    return load_conversation_history(workspace_path, conversation_id, agent_name=agent_name)
 
 
 @router.post("/agent/conversations/save")
@@ -274,6 +276,24 @@ async def save_conversation(req: SaveConversationRequest, agent_name: Optional[s
         return {"status": "error", "message": "No active conversation ID"}
 
     return save_workspace_conversation(req.workspace_path, conv_id, req.name)
+
+
+@router.post("/agent/compact")
+async def trigger_compaction(req: CompactRequest):
+    """Triggers context compaction on the active or specified agent."""
+    try:
+        return await service.compact_context(agent_name=req.agent_name, custom_instructions=req.custom_instructions)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/agent/conversations/clear")
+async def clear_all_history(req: ClearHistoryRequest):
+    """Deletes all persistent session files and resets conversation history."""
+    try:
+        return await service.clear_conversation_history(workspace_path=req.workspace_path, agent_name=req.agent_name)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/agent/browse")

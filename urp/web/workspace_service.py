@@ -3,20 +3,92 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-def list_workspace_conversations(workspace_path: str) -> List[Dict[str, Any]]:
-    """Lists saved conversation sessions in the workspace."""
-    conv_file = os.path.join(os.path.abspath(workspace_path), ".conversation", "conversation_map.json")
+def list_workspace_conversations(workspace_path: str, agent_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Lists saved conversation sessions in the workspace from .sessions and .conversation."""
+    abs_workspace = os.path.abspath(workspace_path)
+    results = []
+
+    # 1. Scan Pi JSONL session files under .sessions/<agent_name> or .sessions/
+    session_dirs = []
+    if agent_name:
+        session_dirs.append(os.path.join(abs_workspace, ".sessions", agent_name))
+    session_dirs.append(os.path.join(abs_workspace, ".sessions"))
+
+    seen_ids = set()
+    for sdir in session_dirs:
+        if os.path.isdir(sdir):
+            for root, _, files in os.walk(sdir):
+                for f in files:
+                    if f.endswith(".jsonl"):
+                        sid = Path(f).stem
+                        if sid not in seen_ids:
+                            seen_ids.add(sid)
+                            results.append({
+                                "id": sid,
+                                "name": f"Session ({Path(root).name}): {sid[:18]}...",
+                                "path": os.path.join(root, f),
+                                "source": "pi",
+                            })
+
+    # 2. Check OpenHands conversation_map.json
+    conv_file = os.path.join(abs_workspace, ".conversation", "conversation_map.json")
     if os.path.exists(conv_file):
         with open(conv_file, "r", encoding="utf-8") as f:
             try:
-                return json.load(f)
+                for item in json.load(f):
+                    if item.get("id") not in seen_ids:
+                        seen_ids.add(item.get("id"))
+                        results.append(item)
             except Exception:
-                return []
-    return []
+                pass
 
-def load_conversation_history(workspace_path: str, conversation_id: str) -> List[Dict[str, str]]:
-    """Reads reconstructed conversation events from the workspace."""
-    base_dir = os.path.join(os.path.abspath(workspace_path), ".conversation")
+    return results
+
+def load_conversation_history(workspace_path: str, conversation_id: str, agent_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Reads reconstructed conversation turns and events from the workspace.
+    Supports:
+    1. Pi session JSONL files under <workspace_path>/.sessions/<agent_name>/*.jsonl
+    2. OpenHands SDK JSON event files under <workspace_path>/.conversation/<conversation_id>/events/
+    """
+    abs_workspace = os.path.abspath(workspace_path)
+
+    # 1. Check for Pi session JSONL files in .sessions/<agent_name> or .sessions/
+    from .pi_log_parser import parse_pi_session_log
+
+    session_dirs_to_check = []
+    if agent_name:
+        session_dirs_to_check.append(os.path.join(abs_workspace, ".sessions", agent_name))
+    session_dirs_to_check.append(os.path.join(abs_workspace, ".sessions"))
+
+    for sdir in session_dirs_to_check:
+        if os.path.isdir(sdir):
+            # Look for matching jsonl files (by conversation_id or newest)
+            jsonl_files = sorted(
+                [os.path.join(root, f) for root, _, files in os.walk(sdir) for f in files if f.endswith(".jsonl")],
+                key=os.path.getmtime,
+                reverse=True,
+            )
+            for jfile in jsonl_files:
+                if conversation_id in jfile or not conversation_id or conversation_id == "latest":
+                    parsed = parse_pi_session_log(jfile)
+                    if parsed.get("turns"):
+                        history = []
+                        for turn in parsed["turns"]:
+                            if turn.get("user_text"):
+                                history.append({"role": "user", "text": turn["user_text"]})
+                            for resp in turn.get("model_responses", []):
+                                if resp.get("text"):
+                                    history.append({
+                                        "role": "agent",
+                                        "text": resp["text"],
+                                        "thinking": resp.get("thinking", []),
+                                        "tool_calls": resp.get("tool_calls", []),
+                                    })
+                        return history
+
+    # 2. Check for OpenHands SDK style events under .conversation/
+    base_dir = os.path.join(abs_workspace, ".conversation")
     events_dir = os.path.join(base_dir, conversation_id, "events")
 
     if not os.path.exists(events_dir):

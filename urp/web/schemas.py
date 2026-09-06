@@ -34,6 +34,14 @@ class CreateAgentRequest(BaseModel):
     ecp_dir: Optional[str] = None
     configuration: Dict[str, Any] = Field(default_factory=dict)
 
+class CompactRequest(BaseModel):
+    agent_name: Optional[str] = None
+    custom_instructions: Optional[str] = None
+
+class ClearHistoryRequest(BaseModel):
+    workspace_path: Optional[str] = None
+    agent_name: Optional[str] = None
+
 class SaveConversationRequest(BaseModel):
     name: str
     workspace_path: str

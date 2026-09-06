@@ -75,6 +75,32 @@ class PiURPAgent(AbstractURPAgent):
             config.get("settlement_timeout") or config.get("timeout") or 600.0
         )
 
+        # Automatically discover and load all workspace skills/ECPs:
+        # Check standard locations inside the project directory:
+        # 1. <workspace_dir>/.agents/skills
+        # 2. <workspace_dir>/skills
+        # 3. Built-in URP A2A skills (e.g. urp/a2a/skills)
+        ws_path = Path(workspace_dir).resolve()
+        candidate_skill_dirs = [
+            ws_path / ".agents" / "skills",
+            ws_path / "skills",
+        ]
+
+        # Scan and mount each individual package or skills directory
+        for sdir in candidate_skill_dirs:
+            if sdir.is_dir():
+                # Mount directory itself so pi discovers all sub-packages
+                extra_args.extend(["--skill", str(sdir)])
+                # Also mount each sub-folder directly if it contains a SKILL.md
+                for sub in sdir.iterdir():
+                    if sub.is_dir() and (sub / "SKILL.md").is_file():
+                        extra_args.extend(["--skill", str(sub)])
+
+        # Also load built-in URP A2A peer dialing skill if not already present in workspace
+        builtin_a2a_skill = Path(__file__).resolve().parent.parent.parent / "a2a" / "skills" / "a2a-peer-dialing"
+        if builtin_a2a_skill.is_dir():
+            extra_args.extend(["--skill", str(builtin_a2a_skill)])
+
         self.pi_client = PiRpcClient(
             workspace_dir=workspace_dir,
             model=model,

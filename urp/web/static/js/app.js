@@ -399,6 +399,38 @@ async function stopSpecificAgent(agentName) {
     }
 }
 
+async function loadWorkspaceHistoryForAgent(agentName) {
+    const ws = document.getElementById('workspacePath').value.trim() || './agent_workspace';
+    try {
+        const res = await fetch(`/agent/conversations/history?workspace_path=${encodeURIComponent(ws)}&conversation_id=latest&agent_name=${encodeURIComponent(agentName)}`);
+        if (!res.ok) return false;
+        const history = await res.json();
+        if (history && history.length > 0) {
+            consoleDiv.innerHTML = '';
+            addLog(`Loaded ${history.length} conversation turn(s) from workspace for ${agentName}`, 'system-info');
+            history.forEach(turn => {
+                if (turn.role === 'user') {
+                    addLog(turn.text, 'user-msg');
+                } else {
+                    if (turn.tool_calls && turn.tool_calls.length > 0) {
+                        turn.tool_calls.forEach(tc => {
+                            addToolCallLog(tc.name, tc.arguments, tc.result, tc.is_subtask);
+                        });
+                    }
+                    if (turn.text) {
+                        addLog(turn.text, 'agent-msg');
+                    }
+                }
+            });
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            return true;
+        }
+    } catch (e) {
+        console.warn('Could not auto-load workspace conversation history:', e);
+    }
+    return false;
+}
+
 async function switchActiveAgent(agentName) {
     if (agentName === currentActiveAgent) return;
 
@@ -418,25 +450,29 @@ async function switchActiveAgent(agentName) {
 
         // Restore or initialize session conversation for switched agent
         consoleDiv.innerHTML = '';
-        if (!agentSessions[agentName] || agentSessions[agentName].logs.length === 0) {
-            if (!agentSessions[agentName]) {
-                agentSessions[agentName] = {
-                    contextId: generateId('ctx-'),
-                    taskId: generateId('task-'),
-                    logs: [],
-                };
-            }
-            addLog(`Switched focus to agent: ${agentName}`, 'system-info');
-        } else {
-            // Restore saved DOM elements
+        if (agentSessions[agentName] && agentSessions[agentName].logs.length > 0) {
+            // Restore from in-memory session
             agentSessions[agentName].logs.forEach(l => {
                 consoleDiv.appendChild(l);
             });
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        } else {
+            // Check if saved history exists in the workspace (.sessions/<agent_name> or .conversation/)
+            const loadedFromDisk = await loadWorkspaceHistoryForAgent(agentName);
+            if (!loadedFromDisk) {
+                if (!agentSessions[agentName]) {
+                    agentSessions[agentName] = {
+                        contextId: generateId('ctx-'),
+                        taskId: generateId('task-'),
+                        logs: [],
+                    };
+                }
+                addLog(`Switched focus to agent: ${agentName}`, 'system-info');
+            }
         }
 
-        currentContextId = agentSessions[agentName].contextId;
-        currentTaskId = agentSessions[agentName].taskId;
+        currentContextId = (agentSessions[agentName] && agentSessions[agentName].contextId) || generateId('ctx-');
+        currentTaskId = (agentSessions[agentName] && agentSessions[agentName].taskId) || generateId('task-');
         updateIdDisplays();
 
         await refreshActiveAgents();
@@ -988,7 +1024,81 @@ async function attachTaskStream() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Modal & Directory Helpers
+// 6. Context Compaction & Delete History
+// ---------------------------------------------------------------------------
+
+async function triggerContextCompaction() {
+    if (!currentActiveAgent) {
+        alert('No active agent running');
+        return;
+    }
+    const instructions = prompt('Optional custom instructions for compaction summary (leave blank for default):');
+    addLog(`Triggering context compaction on ${currentActiveAgent}...`, 'system-info');
+
+    try {
+        const res = await fetch('/agent/compact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                agent_name: currentActiveAgent,
+                custom_instructions: instructions || null,
+            }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            alert('Compaction error: ' + (data.detail || res.statusText));
+            return;
+        }
+
+        if (data.status === 'compacted') {
+            addLog(`Context compacted successfully on ${data.agent_name}.`, 'system-info');
+        } else {
+            addLog(`Compaction response: ${data.status} - ${data.message || JSON.stringify(data)}`, 'system-info');
+        }
+    } catch (e) {
+        alert('Error triggering compaction: ' + e);
+    }
+}
+
+async function clearAllConversationHistory() {
+    const targetAgent = currentActiveAgent || 'all';
+    if (!confirm(`Are you sure you want to delete all persistent conversation history for ${targetAgent} from the project workspace?`)) {
+        return;
+    }
+
+    const ws = document.getElementById('workspacePath').value.trim();
+    addLog(`Clearing conversation history for ${targetAgent}...`, 'system-info');
+
+    try {
+        const res = await fetch('/agent/conversations/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                workspace_path: ws,
+                agent_name: currentActiveAgent,
+            }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            alert('Failed to clear history: ' + (data.detail || res.statusText));
+            return;
+        }
+
+        consoleDiv.innerHTML = '';
+        if (currentActiveAgent && agentSessions[currentActiveAgent]) {
+            agentSessions[currentActiveAgent].logs = [];
+        }
+        addLog(`Conversation history deleted (${data.deleted_files_count} session files removed).`, 'system-info');
+        resetA2AContext();
+    } catch (e) {
+        alert('Error deleting history: ' + e);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 7. Modal & Directory Helpers
 // ---------------------------------------------------------------------------
 
 function showInspector(title, jsonData) {
@@ -1090,19 +1200,26 @@ document.getElementById('messageInput').addEventListener('keydown', function(e) 
 });
 
 // Initial boot
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     updateIdDisplays();
     loadAgentTypes();
-    refreshActiveAgents();
+    await refreshActiveAgents();
     discoverAgentCard();
     onWorkspacePathChanged();
+    if (currentActiveAgent) {
+        await loadWorkspaceHistoryForAgent(currentActiveAgent);
+    }
     setInterval(updateStatus, 3000);
 });
 
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
     updateIdDisplays();
     loadAgentTypes();
-    refreshActiveAgents();
-    discoverAgentCard();
-    onWorkspacePathChanged();
+    refreshActiveAgents().then(() => {
+        discoverAgentCard();
+        onWorkspacePathChanged();
+        if (currentActiveAgent) {
+            loadWorkspaceHistoryForAgent(currentActiveAgent);
+        }
+    });
 }
