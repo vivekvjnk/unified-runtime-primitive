@@ -52,8 +52,8 @@ def test_build_agent_from_config():
 def test_load_all_agent_configs():
     registered = load_all_agent_configs("configs/agents")
     assert "pi_agent" in registered
-    assert "echo" in registered
-    assert "sdk" in registered
+    assert "echo_agent" in registered
+    assert "sdk_agent" in registered
 
     # Verify factory in registry
     factory = get_agent_factory("pi_agent")

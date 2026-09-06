@@ -13,8 +13,8 @@ def test_list_agent_types():
     types = response.json()
     assert isinstance(types, list)
     type_ids = [t["id"] for t in types]
-    assert "echo" in type_ids
-    assert "sdk" in type_ids
+    assert "echo_agent" in type_ids
+    assert "sdk_agent" in type_ids
     assert "pi_agent" in type_ids
 
 def test_web_server_index():
