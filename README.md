@@ -368,7 +368,18 @@ if __name__ == "__main__":
 
 ---
 
-## 8. Comparative Architectural Positioning
+## 8. Agent2Agent (A2A) Protocol Interoperability
+
+`urp-core` natively implements the **Agent2Agent (A2A) v1.0 standard** (`urp.a2a`), allowing external clients, multi-agent orchestrators, and browser interfaces to interact with URP agents as standard A2A peers:
+
+* **Dynamic Agent Card Discovery:** Exposes `GET /.well-known/agent.json` and `GET /a2a/v1/agents` derived from static `AgentDescriptor` metadata.
+* **Server-Sent Events (SSE) Streaming:** Implements `POST /message:stream` to stream real-time token deltas (`TEXT_DELTA`), tool call events, and sub-task delegations directly over standard `text/event-stream`.
+* **Stateful Task Management:** Provides full task query and cancellation endpoints (`GET /tasks/{id}`, `POST /tasks/{id}:cancel`).
+* **WebHMI Reference Client:** The browser dashboard (`urp/web`) communicates exclusively as a native A2A client.
+
+---
+
+## 9. Comparative Architectural Positioning
 
 | Feature / Dimension | Classical Actor Model (Erlang/Akka) | High-Level Agent Frameworks (OpenHands, LangGraph) | URP (`urp-core`) |
 | --- | --- | --- | --- |
@@ -380,6 +391,6 @@ if __name__ == "__main__":
 
 ---
 
-## 9. [License](LICENSE)
+## 10. [License](LICENSE)
 
 This project is licensed under the **Apache License, Version 2.0 (Apache-2.0)**.

@@ -73,24 +73,34 @@ unified-runtime-primitive/
 │   │   ├── agent_key.py        # AgentKey, AgentReadiness, AgentEntry, and AgentHandle
 │   │   ├── agent_registry.py   # Global & instance-based AgentRegistry with create hooks
 │   │   └── host.py             # URPHost runtime host kernel
+│   ├── a2a/                    # Native Agent2Agent (A2A) protocol adapter & endpoints
+│   │   ├── __init__.py
+│   │   ├── models.py           # Pydantic v2 A2A models (AgentCard, Message, Task, StreamResponse)
+│   │   ├── translator.py       # Bidirectional protocol translator (URP Envelope <-> A2A Types)
+│   │   ├── task_manager.py     # Stateful task lifecycle manager and SSE subscriber pub/sub
+│   │   └── router.py           # FastAPI router (/.well-known/agent.json, /message:stream, /tasks)
 │   ├── harnesses/              # Pluggable execution engine adapters
 │   │   ├── openhands/          # OpenHands SDK wrapper (SDKURPAgent)
 │   │   └── pi/                 # Pi coding agent harness (PiURPAgent, PiRpcClient)
-│   ├── agents/                 # Reference agent implementations (EchoAgent)
-│   └── web/                    # Modular FastAPI & WebSocket hosting server
-│       ├── app.py              # Application factory and lifespan handler
+│   ├── agents/                 # Reference agent implementations (EchoAgent, PiGeminiAgent)
+│   └── web/                    # Modular FastAPI & A2A Web Client hosting server
+│       ├── app.py              # Application factory, static mount, and lifespan handler
 │       ├── routes.py           # REST endpoints and WebSocket stream
 │       ├── schemas.py          # Request and response models
 │       ├── agent_service.py    # URPHost lifecycle and registry coordination
 │       ├── workspace_service.py# Session persistence and directory browser
-│       └── templates/          # HTML5/CSS/JS dark-theme dashboard
+│       ├── static/             # Modular static assets (css/style.css, js/app.js)
+│       └── templates/          # Semantic HTML5 template with foldable sidebar
 └── tests/
     ├── test_basic.py           # Basic agent lifecycle and state transition unit tests
     ├── test_host.py            # URPHost integration tests
     ├── test_config_loader.py   # JSON configuration loader tests
     ├── test_web_server.py      # REST API and web console integration tests
     ├── test_pi_rpc_integration.py # Pi JSON-RPC client integration tests
-    └── test_pi_urp_agent_integration.py # PiURPAgent integration tests
+    ├── test_pi_urp_agent_integration.py # PiURPAgent integration tests
+    ├── test_streaming.py       # URP first-class streaming unit tests
+    ├── test_a2a_models.py      # A2A models and translator unit tests
+    └── test_a2a_endpoints.py   # A2A REST and SSE streaming integration tests
 ```
 
 ---

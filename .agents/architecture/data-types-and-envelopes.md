@@ -99,10 +99,11 @@ class MessageEnvelope(BaseModel):
     
     type: str                              # Event or message type identifier
     payload: Any = None                    # Structured payload or primitive value
-    sender: str                            # Originator ID (e.g. "host", "a2a-bridge", agent_id)
+    sender: str                            # Originator ID (e.g. "host", "a2a_client", agent_id)
     receiver: str = "HIL"                  # Target ID
     context_id: Optional[str] = None       # Multi-turn conversational session anchor
     task_id: Optional[str] = None          # Isolated unit-of-work task anchor
+    streaming: bool = False                # Explicit streaming negotiation (in-flight chunks)
     message_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     correlation_id: Optional[str] = None   # Tracing ID to link requests to emitted events
     metadata: Dict[str, Any] = Field(default_factory=dict)

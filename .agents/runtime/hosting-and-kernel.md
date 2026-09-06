@@ -35,37 +35,43 @@ This document describes the host runtime kernel (`urp.host.URPHost`), the indepe
 
 ---
 
-## 2. Web Server & Console Architecture (`urp.web`)
+## 2. Web Server & Console Architecture (`urp.web` & `urp.a2a`)
 
-`urp.web` provides a modular FastAPI and WebSocket service for testing, inspecting, and operating URP agents interactively.
+`urp.web` provides a modular FastAPI service with native Agent2Agent (A2A) protocol endpoints and an interactive web console.
 
 ### Module Structure
 ```
 urp/web/
 ├── __init__.py           # Package exports (app, create_app, AgentHostingService)
-├── app.py                # FastAPI factory and lifespan context manager
-├── routes.py             # HTTP and WebSocket route handlers
+├── app.py                # FastAPI factory, lifespan context manager, static files mount
+├── routes.py             # Console and filesystem picker route handlers
 ├── schemas.py            # Pydantic request models
 ├── agent_service.py      # Host lifecycle and registry coordination service
 ├── workspace_service.py  # Session persistence and directory browser helpers
+├── static/
+│   ├── css/style.css     # Modernized dark theme, collapsible cards, responsive layout
+│   └── js/app.js         # Modular client logic, A2A SSE stream consumer, sidebar toggle
 └── templates/
-    └── index.html        # Interactive dark-theme dashboard with marked.js
+    └── index.html        # Clean semantic HTML5 dashboard with foldable sidebar
 ```
 
-### Endpoints
+### Protocol & Web Endpoints
 
-| Route | Method | Purpose |
-|---|---|---|
-| `/` | `GET` | Interactive browser-based testing console with markdown & event timeline rendering. |
-| `/agent/types` | `GET` | Lists all registered agent types discovered via `AgentRegistry`. |
-| `/agent/init` | `POST` | Initializes and starts an agent instance dynamically resolved via `AgentRegistry`. |
-| `/agent/message` | `POST` | Ingests a new message into the active agent mailbox with optional `context_id` and `task_id`. |
-| `/agent/state` | `GET` | Returns current serialized state (`status`, `session_id`, `mailbox_size`, `last_process_result`, `agent_name`). |
-| `/agent/conversations` | `GET` | Lists persistent conversation sessions saved in `.conversation/conversation_map.json`. |
-| `/agent/conversations/history` | `GET` | Reconstructs historical user/agent conversation events from workspace. |
-| `/agent/conversations/save` | `POST` | Persists the active conversation ID under a human-readable name. |
-| `/agent/browse` | `GET` | Directory browser endpoint for selecting workspace paths from the web UI. |
-| `/ws` | `WebSocket` | Real-time event stream broadcasting agent lifecycle and output envelopes to UI. |
+| Route | Method | Protocol | Purpose |
+|---|---|---|---|
+| `/.well-known/agent.json` | `GET` | **A2A** | Discovers active agent card (name, description, capabilities, skills, endpoints). |
+| `/a2a/v1/agents` | `GET` | **A2A** | Lists catalog of all available agent cards on this host. |
+| `/message:send` | `POST` | **A2A** | Synchronous message dispatch returning completed `Task` snapshot. |
+| `/message:stream` | `POST` | **A2A** | Real-time Server-Sent Events (SSE) stream delivering in-flight tokens, tool executions, and completion. |
+| `/tasks/{task_id}` | `GET` | **A2A** | Queries current task status, history, and output artifacts. |
+| `/tasks` | `GET` | **A2A** | Lists tasks with optional context and status filtering. |
+| `/tasks/{task_id}:cancel`| `POST` | **A2A** | Cancels a running task. |
+| `/tasks/{task_id}:subscribe` | `GET` | **A2A** | Re-attaches an SSE stream to an ongoing task. |
+| `/` | `GET` | UI | Serves the reference A2A WebHMI dashboard. |
+| `/agent/types` | `GET` | Console | Lists registered agent types. |
+| `/agent/init` | `POST` | Console | Deploys an agent instance. |
+| `/agent/state` | `GET` | Console | Telemetry snapshot (`status`, `active_conversation_id`, `mailbox_size`). |
+| `/agent/browse` | `GET` | Console | Directory browser modal for selecting workspace directories. |
 
 ---
 

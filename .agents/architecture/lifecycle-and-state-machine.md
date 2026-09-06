@@ -122,7 +122,18 @@ URP incorporates deterministic contract verification around every task execution
 
 ---
 
-## 4. Failure Categorization
+## 4. First-Class In-Flight Streaming & Sub-Task Tracking
+
+URP provides native support for in-flight progressive streaming without violating the FSM:
+
+1. **Streaming Negotiation:** Inbound `MessageEnvelope` objects declare `streaming=True` when progressive output is requested (e.g. from A2A `POST /message:stream`).
+2. **Execution Context:** During `_lifecycle_loop()`, the active envelope is accessible via `self._current_message` and `self.is_streaming`.
+3. **In-Flight Chunk Emission:** Subclasses invoke `self.emit_chunk(chunk, event_type="TEXT_DELTA")`. If `streaming=True`, chunks are emitted onto the event bus in real time; if `streaming=False`, intermediate chunks are cleanly suppressed to avoid bus congestion.
+4. **Sub-Task Delegation Interception:** When an agent invokes sub-agents (such as via Pi's `delegate` tool), tool start/end events are mapped directly into `TASK_SUBTASK_STARTED` and `TASK_SUBTASK_COMPLETED` envelopes carrying the active `task_id`.
+
+---
+
+## 5. Failure Categorization
 
 All task failures are categorized using `FailureCategory` (`urp.core.data_types`):
 
