@@ -1,4 +1,4 @@
-// URP-HF Native A2A Web Client & Protocol Console
+// URP-HF Native A2A Web Client & Multi-Agent Protocol Console
 
 const consoleDiv = document.getElementById('console');
 const statusText = document.getElementById('statusText');
@@ -10,6 +10,11 @@ const sidebar = document.getElementById('sidebar');
 const headerTaskId = document.getElementById('headerTaskId');
 const headerContextId = document.getElementById('headerContextId');
 
+// Multi-Agent Tab Bar
+const agentTabsContainer = document.getElementById('agentTabsContainer');
+const workspaceAgentsNotice = document.getElementById('workspaceAgentsNotice');
+const workspaceAgentsText = document.getElementById('workspaceAgentsText');
+
 // Modals
 const inspectorModal = document.getElementById('inspectorModal');
 const inspectorTitle = document.getElementById('inspectorTitle');
@@ -17,8 +22,17 @@ const inspectorJson = document.getElementById('inspectorJson');
 const pickerModal = document.getElementById('pickerModal');
 const dirList = document.getElementById('dirList');
 const currentBrowsePathDiv = document.getElementById('currentBrowsePath');
+const createAgentModal = document.getElementById('createAgentModal');
 
+// Multi-Agent State Tracking
 let registeredAgents = [];
+let runningAgents = [];
+let currentActiveAgent = null; // Agent name/id
+
+// Isolated conversation state per agent
+// Map: agent_name -> { contextId, taskId, logs: [HTML elements/snapshots] }
+const agentSessions = {};
+
 let currentContextId = generateId('ctx-');
 let currentTaskId = generateId('task-');
 let activeStreamCard = null;
@@ -48,6 +62,9 @@ function updateIdDisplays() {
 function resetA2AContext() {
     currentContextId = generateId('ctx-');
     document.getElementById('customContextId').value = '';
+    if (currentActiveAgent && agentSessions[currentActiveAgent]) {
+        agentSessions[currentActiveAgent].contextId = currentContextId;
+    }
     updateIdDisplays();
     addLog(`Initialized new A2A context: ${currentContextId}`, 'system-info');
 }
@@ -56,6 +73,9 @@ function resetA2ATask() {
     currentTaskId = generateId('task-');
     document.getElementById('customTaskId').value = '';
     document.getElementById('opTaskId').value = currentTaskId;
+    if (currentActiveAgent && agentSessions[currentActiveAgent]) {
+        agentSessions[currentActiveAgent].taskId = currentTaskId;
+    }
     updateIdDisplays();
     addLog(`Allocated new A2A task ID: ${currentTaskId}`, 'system-info');
 }
@@ -67,6 +87,9 @@ function toggleSidebar() {
 
 function clearConsole() {
     consoleDiv.innerHTML = '';
+    if (currentActiveAgent && agentSessions[currentActiveAgent]) {
+        agentSessions[currentActiveAgent].logs = [];
+    }
     addLog('Console cleared', 'system-info');
 }
 
@@ -91,6 +114,19 @@ function addLog(msg, type='event') {
     
     consoleDiv.appendChild(div);
     consoleDiv.scrollTop = consoleDiv.scrollHeight;
+
+    // Save snapshot to active agent's isolated session history
+    if (currentActiveAgent) {
+        if (!agentSessions[currentActiveAgent]) {
+            agentSessions[currentActiveAgent] = {
+                contextId: currentContextId,
+                taskId: currentTaskId,
+                logs: [],
+            };
+        }
+        agentSessions[currentActiveAgent].logs.push(div.cloneNode(true));
+    }
+
     return div;
 }
 
@@ -121,8 +157,15 @@ function finalizeStreamingCard(fullText) {
         if (body) {
             body.innerHTML = marked.parse(currentStreamText);
         }
-        // Ensure final card stays at bottom after tools group
         consoleDiv.appendChild(activeStreamCard);
+
+        // Update stored clone in active agent's history
+        if (currentActiveAgent && agentSessions[currentActiveAgent]) {
+            const logs = agentSessions[currentActiveAgent].logs;
+            if (logs.length > 0) {
+                logs[logs.length - 1] = activeStreamCard.cloneNode(true);
+            }
+        }
     } else if (fullText) {
         addLog(fullText, 'agent-msg');
     }
@@ -155,7 +198,6 @@ function getOrCreateToolsGroup() {
         body.className = 'tools-group-body';
         details.appendChild(body);
 
-        // Position tools group before the active streaming card if it already exists
         if (activeStreamCard && activeStreamCard.parentNode === consoleDiv) {
             consoleDiv.insertBefore(details, activeStreamCard);
         } else {
@@ -224,7 +266,6 @@ function addToolCallLog(toolName, argsStr, resultStr, isSubtask=false) {
         group.appendChild(details);
     }
 
-    // Ensure active streaming agent card remains visually below the tools group
     if (activeStreamCard && activeStreamCard.parentNode === consoleDiv) {
         consoleDiv.appendChild(activeStreamCard);
     }
@@ -232,17 +273,125 @@ function addToolCallLog(toolName, argsStr, resultStr, isSubtask=false) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. A2A Agent Card Discovery & Catalog
+// 1. Multi-Agent Roster & Interactive Tab Bar
 // ---------------------------------------------------------------------------
 
-async function discoverAgentCard() {
+async function refreshActiveAgents() {
     try {
-        const res = await fetch('/.well-known/agent.json');
+        const res = await fetch('/agent/active');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        currentActiveAgent = data.active_agent_name;
+        runningAgents = data.running_agents || [];
+
+        renderAgentTabs();
+        updateActiveAgentBadge();
+    } catch (e) {
+        console.warn('Failed refreshing active agents:', e);
+    }
+}
+
+function renderAgentTabs() {
+    if (!agentTabsContainer) return;
+    agentTabsContainer.innerHTML = '';
+
+    if (runningAgents.length === 0) {
+        const emptySpan = document.createElement('span');
+        emptySpan.style.fontSize = '0.75rem';
+        emptySpan.style.color = 'var(--text-dim)';
+        emptySpan.textContent = 'No agents running';
+        agentTabsContainer.appendChild(emptySpan);
+        return;
+    }
+
+    runningAgents.forEach(agent => {
+        const pill = document.createElement('div');
+        pill.className = 'agent-tab-pill' + (agent.is_active ? ' active' : '');
+        pill.title = `${agent.agent_name} (${agent.status})\n${agent.description || ''}`;
+
+        const dot = document.createElement('span');
+        dot.className = 'agent-status-mini-dot';
+        if (agent.status === 'PROCESSING') dot.classList.add('busy');
+        else if (agent.status !== 'WAITING' && agent.status !== 'INITIALIZED') dot.classList.add('offline');
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = agent.agent_name;
+
+        pill.appendChild(dot);
+        pill.appendChild(nameSpan);
+
+        pill.onclick = () => switchActiveAgent(agent.agent_name);
+        agentTabsContainer.appendChild(pill);
+    });
+}
+
+async function switchActiveAgent(agentName) {
+    if (agentName === currentActiveAgent) return;
+
+    try {
+        const res = await fetch('/agent/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agent_name: agentName })
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            alert('Failed switching agent: ' + (err.detail || res.statusText));
+            return;
+        }
+
+        currentActiveAgent = agentName;
+
+        // Restore or initialize session conversation for switched agent
+        consoleDiv.innerHTML = '';
+        if (!agentSessions[agentName]) {
+            agentSessions[agentName] = {
+                contextId: generateId('ctx-'),
+                taskId: generateId('task-'),
+                logs: [],
+            };
+            addLog(`Switched focus to agent: ${agentName}`, 'system-info');
+        } else {
+            // Restore isolated logs
+            agentSessions[agentName].logs.forEach(l => consoleDiv.appendChild(l.cloneNode(true)));
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        currentContextId = agentSessions[agentName].contextId;
+        currentTaskId = agentSessions[agentName].taskId;
+        updateIdDisplays();
+
+        await refreshActiveAgents();
+        discoverAgentCard(agentName);
+        updateStatus();
+    } catch (e) {
+        console.error('Error switching agent:', e);
+    }
+}
+
+function updateActiveAgentBadge() {
+    if (!currentActiveAgent) {
+        activeAgentBadge.style.display = 'none';
+        return;
+    }
+    activeAgentBadge.textContent = currentActiveAgent;
+    activeAgentBadge.style.display = 'inline-block';
+}
+
+// ---------------------------------------------------------------------------
+// 2. A2A Agent Card Discovery & Catalog
+// ---------------------------------------------------------------------------
+
+async function discoverAgentCard(agentName=null) {
+    try {
+        const url = agentName ? `/.well-known/agent.json?agent_name=${encodeURIComponent(agentName)}` : '/.well-known/agent.json';
+        const res = await fetch(url);
         if (res.ok) {
             const card = await res.json();
             activeAgentBadge.textContent = `${card.name} v${card.version}`;
             activeAgentBadge.style.display = 'inline-block';
-            document.getElementById('agentDescription').textContent = card.description;
+            document.getElementById('agentDescription').textContent = card.description || '';
         }
     } catch (e) {
         console.warn('Agent card discovery deferred:', e);
@@ -251,9 +400,11 @@ async function discoverAgentCard() {
 
 async function inspectAgentCard() {
     try {
-        const res = await fetch('/.well-known/agent.json');
+        const target = currentActiveAgent || '';
+        const url = target ? `/.well-known/agent.json?agent_name=${encodeURIComponent(target)}` : '/.well-known/agent.json';
+        const res = await fetch(url);
         const card = await res.json();
-        showInspector('Active Agent Card (/.well-known/agent.json)', card);
+        showInspector(`Agent Card: ${card.name}`, card);
     } catch (e) {
         alert('Failed to load Agent Card: ' + e);
     }
@@ -306,8 +457,137 @@ function onAgentTypeChanged() {
     }
 }
 
+async function onWorkspacePathChanged() {
+    const path = document.getElementById('workspacePath').value.trim();
+    if (!path) return;
+    try {
+        const res = await fetch(`/workspace/agents?path=${encodeURIComponent(path)}`);
+        if (!res.ok) return;
+        const discovered = await res.json();
+        if (discovered && discovered.length > 0) {
+            const names = discovered.map(d => d.agent_name).join(', ');
+            workspaceAgentsText.textContent = `Found ${discovered.length} workspace agent(s) in .well_known: ${names}`;
+            workspaceAgentsNotice.style.display = 'block';
+            await loadAgentTypes();
+        } else {
+            workspaceAgentsNotice.style.display = 'none';
+        }
+    } catch (e) {
+        console.warn('Workspace agent scan error:', e);
+    }
+}
+
 // ---------------------------------------------------------------------------
-// 2. Dispatch Dispatch Knobs: Stream Turn, Sync Message, Async Task
+// 3. Dynamic Agent Creation Modal & Normalization
+// ---------------------------------------------------------------------------
+
+function openCreateAgentModal() {
+    const ws = document.getElementById('workspacePath').value;
+    document.getElementById('createAgentWorkspace').value = ws;
+    createAgentModal.style.display = 'block';
+    document.getElementById('createAgentName').focus();
+}
+
+function closeCreateAgentModal() {
+    createAgentModal.style.display = 'none';
+    document.getElementById('createAgentForm').reset();
+}
+
+/**
+ * Real-time normalization for agent name input:
+ * - Automatically converts spaces and hyphens to underscores
+ * - Strips characters other than [a-z0-9_]
+ * - Lowercases input
+ */
+function onAgentNameInput(inputElement) {
+    const cursor = inputElement.selectionStart;
+    const original = inputElement.value;
+    const normalized = original
+        .toLowerCase()
+        .replace(/[\s-]+/g, '_')
+        .replace(/[^a-z0-9_]/g, '')
+        .replace(/_+/g, '_');
+
+    inputElement.value = normalized;
+    inputElement.setSelectionRange(cursor, cursor);
+}
+
+function onCreateHarnessChanged() {
+    const harness = document.getElementById('createAgentHarness').value;
+    const promptArea = document.getElementById('createAgentPrompt');
+    if (harness === 'pi' && !promptArea.value) {
+        promptArea.placeholder = 'You are an expert AI software engineering agent. You have access to bash, read, edit, and write tools. Follow instructions carefully.';
+    } else if (harness === 'echo') {
+        promptArea.placeholder = 'Diagnostic echo agent for verifying message streams and telemetry.';
+    } else if (harness === 'sdk') {
+        promptArea.placeholder = 'Autonomous software agent using OpenHands SDK terminal and file tools.';
+    }
+}
+
+async function handleCreateAgentSubmit(event) {
+    event.preventDefault();
+
+    const nameInput = document.getElementById('createAgentName');
+    const agentName = nameInput.value.trim();
+    if (!agentName) {
+        alert('Please specify a valid Agent Name');
+        return;
+    }
+
+    const submitBtn = document.getElementById('createAgentSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Deploying...';
+
+    try {
+        const formData = new FormData();
+        formData.append('agent_name', agentName);
+        formData.append('workspace_path', document.getElementById('createAgentWorkspace').value.trim());
+        formData.append('description', document.getElementById('createAgentDesc').value.trim());
+        formData.append('system_prompt', document.getElementById('createAgentPrompt').value.trim());
+        formData.append('harness', document.getElementById('createAgentHarness').value);
+        formData.append('thinking_level', document.getElementById('createAgentThinking').value);
+
+        const ecpDir = document.getElementById('createAgentEcpDir').value.trim();
+        if (ecpDir) {
+            formData.append('ecp_dir', ecpDir);
+        }
+
+        const ecpFileInput = document.getElementById('createAgentEcpFile');
+        if (ecpFileInput.files && ecpFileInput.files.length > 0) {
+            formData.append('ecp_file', ecpFileInput.files[0]);
+        }
+
+        const res = await fetch('/agent/create', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || res.statusText);
+        }
+
+        const result = await res.json();
+        addLog(`Successfully authored & deployed agent: ${result.agent_name}`, 'system-info');
+        if (result.extracted_skills && result.extracted_skills.length > 0) {
+            const skNames = result.extracted_skills.map(s => s.skill_name).join(', ');
+            addLog(`Ingested ECP skill(s): ${skNames}`, 'system-info');
+        }
+
+        closeCreateAgentModal();
+        await refreshActiveAgents();
+        await loadAgentTypes();
+        await switchActiveAgent(result.agent_name);
+    } catch (err) {
+        alert('Agent Creation Error: ' + err.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create & Deploy Agent';
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 4. Dispatch Knobs: Stream Turn, Sync Message, Async Task
 // ---------------------------------------------------------------------------
 
 async function dispatchA2ATurn() {
@@ -356,13 +636,19 @@ async function executeStreamTurn(text, contextId, taskId) {
     statusDot.className = 'dot busy';
     statusText.textContent = 'A2A Streaming...';
 
+    const targetParam = currentActiveAgent ? `?agent_name=${encodeURIComponent(currentActiveAgent)}` : '';
+    const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+    };
+    if (currentActiveAgent) {
+        headers['X-Target-Agent'] = currentActiveAgent;
+    }
+
     try {
-        const response = await fetch('/message:stream', {
+        const response = await fetch(`/message:stream${targetParam}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'text/event-stream'
-            },
+            headers: headers,
             body: JSON.stringify({
                 message: {
                     role: 'ROLE_USER',
@@ -417,10 +703,16 @@ async function executeSyncMessage(text, contextId, taskId, returnImmediately) {
     statusDot.className = 'dot busy';
     statusText.textContent = returnImmediately ? 'A2A Dispatching...' : 'A2A Executing...';
 
+    const targetParam = currentActiveAgent ? `?agent_name=${encodeURIComponent(currentActiveAgent)}` : '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (currentActiveAgent) {
+        headers['X-Target-Agent'] = currentActiveAgent;
+    }
+
     try {
-        const response = await fetch('/message:send', {
+        const response = await fetch(`/message:send${targetParam}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify({
                 message: {
                     role: 'ROLE_USER',
@@ -434,205 +726,156 @@ async function executeSyncMessage(text, contextId, taskId, returnImmediately) {
             })
         });
 
-        const data = await response.json();
-        if (!response.ok) {
-            addLog(`A2A Send Error: ${data.detail || response.statusText}`, 'error');
-            return;
-        }
-
-        if (data.task) {
-            const t = data.task;
-            addLog(`Task [${t.id}] Status: ${t.status.state}`, 'system-info');
-
-            // If async dispatch (returnImmediately = true), automatically attach SSE subscriber stream
-            // to follow ongoing execution (text chunks, tools, and completion) in real time
-            if (returnImmediately) {
-                await followOngoingTaskStream(t.id);
-                return;
-            }
-
-            if (t.status.message && t.status.message.parts) {
-                const responseText = t.status.message.parts.map(p => p.text).filter(Boolean).join('\n');
-                if (responseText) {
-                    addLog(responseText, 'agent-msg');
-                }
-            }
-        } else if (data.message && data.message.parts) {
-            const responseText = data.message.parts.map(p => p.text).filter(Boolean).join('\n');
-            addLog(responseText, 'agent-msg');
-        }
-    } catch (e) {
-        addLog(`Error during /message:send: ${e}`, 'error');
-    }
-}
-
-// C. Follow Ongoing Task Stream via GET /tasks/{id}:subscribe
-async function followOngoingTaskStream(taskId) {
-    statusDot.className = 'dot busy';
-    statusText.textContent = 'A2A Task Streaming...';
-    activeStreamCard = null;
-    currentStreamText = '';
-
-    try {
-        const response = await fetch(`/tasks/${encodeURIComponent(taskId)}:subscribe`, {
-            headers: { 'Accept': 'text/event-stream' }
-        });
-
         if (!response.ok) {
             const err = await response.json();
-            addLog(`Subscription error: ${err.detail || response.statusText}`, 'error');
+            addLog(`A2A Error: ${err.detail || response.statusText}`, 'error');
             return;
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n\n');
-            buffer = lines.pop();
-
-            for (const block of lines) {
-                if (!block.trim() || block.startsWith(':')) continue;
-                const dataLine = block.split('\n').find(l => l.startsWith('data: '));
-                if (!dataLine) continue;
-
-                const rawJson = dataLine.substring(6);
-                try {
-                    const streamResp = JSON.parse(rawJson);
-                    handleA2AStreamResponse(streamResp);
-                } catch (parseErr) {
-                    console.error('Error parsing SSE json:', parseErr, rawJson);
-                }
+        const sendResp = await response.json();
+        if (returnImmediately) {
+            addLog(`Task submitted asynchronously: ${sendResp.task ? sendResp.task.id : taskId}`, 'system-info');
+            if (sendResp.task) {
+                addLog(`State: ${sendResp.task.status.state}`, 'system-info');
+            }
+        } else {
+            if (sendResp.task && sendResp.task.status) {
+                const finalState = sendResp.task.status.state;
+                const msg = sendResp.task.status.message;
+                const outText = msg && msg.parts && msg.parts[0] ? msg.parts[0].text : `Task finished with state: ${finalState}`;
+                addLog(outText, finalState === 'TASK_STATE_FAILED' ? 'error' : 'agent-msg');
+            } else if (sendResp.message && sendResp.message.parts) {
+                addLog(sendResp.message.parts[0].text, 'agent-msg');
             }
         }
     } catch (e) {
-        addLog(`Error following task stream: ${e}`, 'error');
+        addLog(`Sync dispatch error: ${e}`, 'error');
     }
 }
 
-// D. Stream event handler
-function handleA2AStreamResponse(resp) {
-    if (resp.task) {
-        console.log('Task initialized:', resp.task.id);
+// Handler for all streaming events
+function handleA2AStreamResponse(streamResp) {
+    if (streamResp.message) {
+        const text = streamResp.message.parts && streamResp.message.parts[0] ? streamResp.message.parts[0].text : '';
+        if (text) {
+            finalizeStreamingCard(text);
+        }
         return;
     }
 
-    if (resp.statusUpdate) {
-        const su = resp.statusUpdate;
-        const meta = su.metadata || {};
+    if (streamResp.statusUpdate) {
+        const su = streamResp.statusUpdate;
+        const state = su.status ? su.status.state : 'WORKING';
 
-        if (meta.is_chunk && su.status?.message) {
-            const delta = su.status.message.parts?.[0]?.text || '';
-            appendStreamingDelta(delta);
-            return;
+        if (su.metadata && su.metadata.event_type) {
+            const evtType = su.metadata.event_type;
+
+            if (evtType === 'TEXT_DELTA') {
+                const delta = su.metadata.delta || (su.metadata.payload ? su.metadata.payload.delta : '');
+                if (delta) {
+                    appendStreamingDelta(delta);
+                }
+                return;
+            }
+
+            if (evtType === 'AGENT_TOOL_START' || evtType === 'TASK_SUBTASK_STARTED') {
+                const toolName = su.metadata.toolName || su.metadata.tool_name || 'tool';
+                const args = su.metadata.args || su.metadata.parameters || {};
+                const isSubtask = evtType === 'TASK_SUBTASK_STARTED';
+                addToolCallLog(toolName, args, null, isSubtask);
+                return;
+            }
+
+            if (evtType === 'AGENT_TOOL_END' || evtType === 'TASK_SUBTASK_COMPLETED') {
+                const toolName = su.metadata.toolName || su.metadata.tool_name || 'tool';
+                const result = su.metadata.result || su.metadata.output || '';
+                const isSubtask = evtType === 'TASK_SUBTASK_COMPLETED';
+                addToolCallLog(toolName, '(completed)', result, isSubtask);
+                return;
+            }
         }
 
-        if (meta.event_type === 'AGENT_TOOL_START') {
-            addToolCallLog(meta.toolName || 'tool', meta.args || {});
-            return;
-        } else if (meta.event_type === 'AGENT_TOOL_END') {
-            return;
+        if (state === 'TASK_STATE_COMPLETED') {
+            const outText = su.status.message && su.status.message.parts && su.status.message.parts[0]
+                ? su.status.message.parts[0].text
+                : '';
+            finalizeStreamingCard(outText);
+            statusDot.className = 'dot online';
+            statusText.textContent = 'Task Completed';
+        } else if (state === 'TASK_STATE_FAILED') {
+            const errText = su.status.message && su.status.message.parts && su.status.message.parts[0]
+                ? su.status.message.parts[0].text
+                : 'Task failed';
+            finalizeStreamingCard();
+            addLog(`Task Failed: ${errText}`, 'error');
+            statusDot.className = 'dot';
+            statusDot.style.background = 'var(--danger)';
+            statusText.textContent = 'Task Failed';
         }
-
-        if (meta.event_type === 'TASK_SUBTASK_STARTED') {
-            addToolCallLog('delegate', meta.args || meta, '', true);
-            return;
-        } else if (meta.event_type === 'TASK_SUBTASK_COMPLETED') {
-            addLog('Sub-task completed successfully', 'system-info');
-            return;
-        }
-
-        if (su.status?.state === 'TASK_STATE_COMPLETED') {
-            const finalText = su.status.message?.parts?.[0]?.text;
-            finalizeStreamingCard(finalText);
-        } else if (su.status?.state === 'TASK_STATE_FAILED') {
-            const errText = su.status.message?.parts?.[0]?.text || 'Task failed';
-            addLog(errText, 'error');
-        }
-    }
-
-    if (resp.message && resp.message.parts) {
-        const text = resp.message.parts.map(p => p.text).filter(Boolean).join('\n');
-        finalizeStreamingCard(text);
     }
 }
 
 // ---------------------------------------------------------------------------
-// 3. A2A Task Operations: Query, Cancel, List, Re-Subscribe
+// 5. Task Query, Cancel, Re-Subscribe
 // ---------------------------------------------------------------------------
 
 async function queryTaskStatus() {
-    const tid = document.getElementById('opTaskId').value.trim() || currentTaskId;
-    if (!tid) { alert('Please enter or select a Task ID'); return; }
-
+    const tid = document.getElementById('opTaskId').value.trim();
+    if (!tid) {
+        alert('Enter a Task ID to inspect');
+        return;
+    }
     try {
         const res = await fetch(`/tasks/${encodeURIComponent(tid)}`);
         const task = await res.json();
-        if (!res.ok) {
-            alert(`Task not found: ${task.detail || res.statusText}`);
-            return;
-        }
-        showInspector(`Task Details [${tid}]`, task);
+        showInspector(`Task: ${tid}`, task);
     } catch (e) {
-        alert('Failed querying task: ' + e);
+        alert('Failed fetching task: ' + e);
     }
 }
 
 async function cancelCurrentTask() {
-    const tid = document.getElementById('opTaskId').value.trim() || currentTaskId;
-    if (!tid) { alert('Please enter or select a Task ID'); return; }
-
-    if (!confirm(`Cancel A2A task '${tid}'?`)) return;
-
+    const tid = document.getElementById('opTaskId').value.trim();
+    if (!tid) {
+        alert('Enter a Task ID to cancel');
+        return;
+    }
     try {
         const res = await fetch(`/tasks/${encodeURIComponent(tid)}:cancel`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reason: 'Canceled from WebHMI' })
+            method: 'POST'
         });
         const task = await res.json();
-        if (!res.ok) {
-            alert(`Cancellation error: ${task.detail || res.statusText}`);
-            return;
-        }
-        addLog(`Task '${tid}' canceled: ${task.status?.state}`, 'system-info');
+        addLog(`Task ${tid} canceled. Current state: ${task.status.state}`, 'system-info');
         updateStatus();
     } catch (e) {
-        alert('Failed canceling task: ' + e);
+        alert('Failed to cancel task: ' + e);
     }
 }
 
 async function listHostTasks() {
     try {
-        const res = await fetch('/tasks?limit=20');
+        const res = await fetch('/tasks?limit=30');
         const tasks = await res.json();
-        showInspector('A2A Task History (/tasks)', tasks);
+        showInspector('Host Tasks List (/tasks)', tasks);
     } catch (e) {
-        alert('Failed listing tasks: ' + e);
+        alert('Failed fetching tasks list: ' + e);
     }
 }
 
 async function attachTaskStream() {
-    const tid = document.getElementById('opTaskId').value.trim() || currentTaskId;
-    if (!tid) { alert('Please enter a Task ID to subscribe to'); return; }
-
-    addLog(`Subscribing to ongoing task stream: ${tid}`, 'system-info');
-    activeStreamCard = null;
-    currentStreamText = '';
-
+    const tid = document.getElementById('opTaskId').value.trim();
+    if (!tid) {
+        alert('Enter a Task ID to re-subscribe');
+        return;
+    }
+    addLog(`Re-subscribing to live SSE stream of task: ${tid}`, 'system-info');
     try {
         const response = await fetch(`/tasks/${encodeURIComponent(tid)}:subscribe`, {
             headers: { 'Accept': 'text/event-stream' }
         });
-
         if (!response.ok) {
             const err = await response.json();
-            alert(`Subscribe failed: ${err.detail || response.statusText}`);
+            alert('Cannot subscribe: ' + (err.detail || response.statusText));
             return;
         }
 
@@ -668,7 +911,7 @@ async function attachTaskStream() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Modal & Directory Helpers
+// 6. Modal & Directory Helpers
 // ---------------------------------------------------------------------------
 
 function showInspector(title, jsonData) {
@@ -681,11 +924,15 @@ function closeInspector() {
     inspectorModal.style.display = 'none';
 }
 
+let pickerTargetField = 'workspace';
 let currentBrowsingPath = ".";
-function openPicker() {
+
+function openPicker(target='workspace') {
+    pickerTargetField = target;
     pickerModal.style.display = 'block';
     browse(currentBrowsingPath);
 }
+
 function closePicker() {
     pickerModal.style.display = 'none';
 }
@@ -710,7 +957,14 @@ async function browse(path) {
 }
 
 function selectCurrentDir() {
-    document.getElementById('workspacePath').value = currentBrowsingPath;
+    if (pickerTargetField === 'workspace') {
+        document.getElementById('workspacePath').value = currentBrowsingPath;
+        onWorkspacePathChanged();
+    } else if (pickerTargetField === 'create_workspace') {
+        document.getElementById('createAgentWorkspace').value = currentBrowsingPath;
+    } else if (pickerTargetField === 'ecp_dir') {
+        document.getElementById('createAgentEcpDir').value = currentBrowsingPath;
+    }
     closePicker();
 }
 
@@ -729,13 +983,15 @@ async function initAgent() {
     });
     const data = await res.json();
     addLog(`Agent ready: ${data.agent_id}`, 'system-info');
+    await refreshActiveAgents();
     discoverAgentCard();
     updateStatus();
 }
 
 async function updateStatus() {
     try {
-        const res = await fetch('/agent/state');
+        const target = currentActiveAgent ? `?agent_name=${encodeURIComponent(currentActiveAgent)}` : '';
+        const res = await fetch(`/agent/state${target}`);
         const state = await res.json();
         
         statusText.textContent = state.status || 'Offline';
@@ -760,13 +1016,16 @@ document.getElementById('messageInput').addEventListener('keydown', function(e) 
 document.addEventListener('DOMContentLoaded', () => {
     updateIdDisplays();
     loadAgentTypes();
+    refreshActiveAgents();
     discoverAgentCard();
+    onWorkspacePathChanged();
     setInterval(updateStatus, 3000);
 });
 
-// Fallback execution if DOMContentLoaded already fired
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
     updateIdDisplays();
     loadAgentTypes();
+    refreshActiveAgents();
     discoverAgentCard();
+    onWorkspacePathChanged();
 }

@@ -36,9 +36,12 @@
             <aside id="sidebar">
                 <!-- 1. Agent Discovery & Deployment -->
                 <div class="config-section">
-                    <h3>1. Agent Discovery & Deploy</h3>
-                    <div class="field-group">
-                        <label>Active Agent</label>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h3 style="margin:0;">1. Agent Discovery & Deploy</h3>
+                        <button class="primary" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="openCreateAgentModal()">+ New Agent</button>
+                    </div>
+                    <div class="field-group" style="margin-top:0.6rem;">
+                        <label>Catalog / Available Agent</label>
                         <select id="agentType" onchange="onAgentTypeChanged()">
                             <option value="">Discovering Agent Card...</option>
                         </select>
@@ -47,12 +50,15 @@
                     <div class="field-group">
                         <label>Workspace Path</label>
                         <div style="display: flex; gap: 0.4rem;">
-                            <input type="text" id="workspacePath" value="./agent_workspace">
-                            <button class="secondary" onclick="openPicker()" title="Browse Directory">📁</button>
+                            <input type="text" id="workspacePath" value="./agent_workspace" onchange="onWorkspacePathChanged()">
+                            <button class="secondary" onclick="openPicker('workspace')" title="Browse Directory">📁</button>
                         </div>
                     </div>
+                    <div id="workspaceAgentsNotice" style="display:none; margin-bottom:0.5rem; padding:0.4rem 0.6rem; background:rgba(56, 189, 248, 0.1); border:1px solid rgba(56, 189, 248, 0.3); border-radius:6px; font-size:0.75rem;">
+                        <span id="workspaceAgentsText" style="color:var(--primary);"></span>
+                    </div>
                     <div class="btn-row">
-                        <button onclick="initAgent()">Deploy Agent</button>
+                        <button onclick="initAgent()">Deploy Selected</button>
                         <button class="secondary" onclick="inspectAgentCard()" title="View full A2A Agent Card JSON">Card JSON</button>
                     </div>
                 </div>
@@ -103,6 +109,16 @@
 
             <!-- Main Interactive Console & Chat Stream -->
             <section id="content">
+                <!-- Multi-Agent Interactive Switcher Tab Bar -->
+                <div id="agentTabBar" class="agent-tab-bar">
+                    <div id="agentTabsContainer" class="agent-tabs-list">
+                        <!-- Populated dynamically: [ ⚙️ tiny_infra_agent ] [ 💻 tiny_dev_agent ] -->
+                    </div>
+                    <button class="new-agent-tab-btn" onclick="openCreateAgentModal()" title="Author & Launch New Agent">
+                        + New Agent
+                    </button>
+                </div>
+
                 <div id="status-bar">
                     <div class="status-badge">
                         <div id="statusDot" class="dot"></div>
@@ -142,6 +158,93 @@
                 </div>
             </section>
         </main>
+
+        <!-- Dynamic Agent Creation Modal -->
+        <div id="createAgentModal" class="modal">
+            <div class="modal-content" style="max-width: 600px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.75rem;">
+                    <h3 style="margin:0; color:var(--primary);">Author & Deploy URP A2A Agent</h3>
+                    <button class="secondary" onclick="closeCreateAgentModal()" style="padding:0.2rem 0.6rem;">✕</button>
+                </div>
+                <form id="createAgentForm" onsubmit="handleCreateAgentSubmit(event)">
+                    <!-- Agent Name (with real-time space-to-underscore normalization) -->
+                    <div class="field-group">
+                        <label>Agent Name / Unique ID <span style="color:var(--danger)">*</span></label>
+                        <input type="text" id="createAgentName" placeholder="e.g. tiny_infra_agent" required oninput="onAgentNameInput(this)">
+                        <span style="font-size: 0.72rem; color: var(--text-dim);">Spaces auto-convert to underscores. Unique identifier in A2A network.</span>
+                    </div>
+
+                    <!-- Description -->
+                    <div class="field-group">
+                        <label>Description / Role</label>
+                        <input type="text" id="createAgentDesc" placeholder="e.g. Infrastructure, Docker & Yocto build specialist">
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <!-- Harness / Engine -->
+                        <div class="field-group">
+                            <label>Harness / Engine</label>
+                            <select id="createAgentHarness" onchange="onCreateHarnessChanged()">
+                                <option value="pi" selected>Pi Coding Agent (Vertex Gemini)</option>
+                                <option value="echo">Echo Diagnostic Agent</option>
+                                <option value="sdk">OpenHands SDK Agent</option>
+                            </select>
+                        </div>
+                        <!-- Thinking Level -->
+                        <div class="field-group">
+                            <label>Thinking Budget</label>
+                            <select id="createAgentThinking">
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="low">Low</option>
+                                <option value="off">Off</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- System Prompt -->
+                    <div class="field-group">
+                        <label>System Prompt / Core Behavioral Instructions</label>
+                        <textarea id="createAgentPrompt" rows="3" placeholder="Enter custom agent directives, tool rules, or specialized domain guidelines..."></textarea>
+                    </div>
+
+                    <!-- Target Workspace Path -->
+                    <div class="field-group">
+                        <label>Target Workspace Directory <span style="color:var(--danger)">*</span></label>
+                        <div style="display: flex; gap: 0.4rem;">
+                            <input type="text" id="createAgentWorkspace" value="./agent_workspace" required>
+                            <button type="button" class="secondary" onclick="openPicker('create_workspace')">📁</button>
+                        </div>
+                    </div>
+
+                    <!-- Capability / ECP Upload -->
+                    <div class="field-group" style="background:var(--tool-bg); padding:0.6rem; border-radius:6px; border:1px solid var(--border);">
+                        <label style="color:var(--primary); font-weight:600;">Optional: Engineering Capability Package (ECP)</label>
+                        <div style="font-size:0.72rem; color:var(--text-dim); margin-bottom:0.4rem;">
+                            Attach a skill bundle containing <code>SKILL.md</code>, tools, and executable scripts.
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr; gap:0.4rem;">
+                            <div>
+                                <label style="font-size:0.75rem;">Local ECP Folder Path:</label>
+                                <div style="display:flex; gap:0.3rem;">
+                                    <input type="text" id="createAgentEcpDir" placeholder="/path/to/ecp_package">
+                                    <button type="button" class="secondary" onclick="openPicker('ecp_dir')">📁</button>
+                                </div>
+                            </div>
+                            <div style="margin-top:0.3rem;">
+                                <label style="font-size:0.75rem;">Or Upload ECP Zip (.zip):</label>
+                                <input type="file" id="createAgentEcpFile" accept=".zip">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+                        <button type="button" class="secondary" onclick="closeCreateAgentModal()">Cancel</button>
+                        <button type="submit" id="createAgentSubmitBtn">Create & Deploy Agent</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <!-- Inspector Modal (Agent Card, Tasks, Catalog) -->
         <div id="inspectorModal" class="modal">
