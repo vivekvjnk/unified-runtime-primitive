@@ -35,8 +35,8 @@ def test_agent_catalog(client):
     agents = resp.json()
     assert isinstance(agents, list)
     assert len(agents) >= 1
-    names = [a["name"] for a in agents]
-    assert any("Echo" in n for n in names)
+    names = [a["name"].lower() for a in agents]
+    assert any("echo" in n for n in names)
 
 
 def test_send_message_sync(client):

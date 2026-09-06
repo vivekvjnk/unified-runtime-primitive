@@ -1,8 +1,8 @@
 {
-  "name": "sdk",
+  "name": "sdk_agent",
   "descriptor": {
-    "agent_id": "vhl.sdk.v1",
-    "name": "OpenHands SDK Agent",
+    "agent_id": "sdk_agent",
+    "name": "sdk_agent",
     "version": "1.0.0",
     "description": "Autonomous software agent wrapping OpenHands SDK with file editor and terminal tools.",
     "capabilities": ["TERMINAL", "FILE_EDITOR"],

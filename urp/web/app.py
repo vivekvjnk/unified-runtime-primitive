@@ -10,7 +10,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initializes the default host agent on server startup and shuts down gracefully."""
-    await service.initialize_agent("echo", "./agent_workspace")
+    await service.initialize_agent("echo_agent", "./agent_workspace")
     yield
     await service.shutdown()
 

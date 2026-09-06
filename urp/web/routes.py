@@ -1,13 +1,13 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
-from .agent_service import AgentHostingService
-from .schemas import InitRequest, MessageRequest, SaveConversationRequest
+from .agent_service import AgentHostingService, normalize_agent_name
+from .schemas import InitRequest, MessageRequest, SaveConversationRequest, SwitchAgentRequest
 from .workspace_service import (
     browse_filesystem,
     list_workspace_conversations,
@@ -39,9 +39,10 @@ async def get_logs_ui():
 
 
 @router.get("/agent/pi/raw-logs")
-async def get_pi_raw_logs(limit: int = 50):
-    """Retrieves structured LLM interaction turns from the active Pi agent harness session log."""
-    if not service.host or not service.host.agent:
+async def get_pi_raw_logs(limit: int = 50, agent_name: Optional[str] = None):
+    """Retrieves structured LLM interaction turns from the target Pi agent session log."""
+    host = service.get_host(agent_name)
+    if not host or not host.agent:
         return {
             "error": "No active URP agent is currently running.",
             "is_pi_agent": False,
@@ -49,13 +50,12 @@ async def get_pi_raw_logs(limit: int = 50):
             "stats": {},
         }
 
-    agent = service.host.agent
-    # Check if this agent is a PiURPAgent harness or exposes get_raw_log_path
+    agent = host.agent
     if not hasattr(agent, "get_raw_log_path"):
         return {
-            "error": f"Active agent ({service.host.descriptor.name}) is not a Pi harness agent and does not provide JSONL session logs.",
+            "error": f"Agent ({host.descriptor.name}) is not a Pi harness agent and does not provide JSONL session logs.",
             "is_pi_agent": False,
-            "agent_type": service.host.descriptor.agent_id,
+            "agent_type": host.descriptor.agent_id,
             "turns": [],
             "stats": {},
         }
@@ -71,8 +71,8 @@ async def get_pi_raw_logs(limit: int = 50):
 
     parsed = parse_pi_session_log(session_path, max_turns=limit)
     parsed["is_pi_agent"] = True
-    parsed["agent_id"] = service.host.descriptor.agent_id
-    parsed["agent_name"] = service.host.descriptor.name
+    parsed["agent_id"] = host.descriptor.agent_id
+    parsed["agent_name"] = host.descriptor.name
     return parsed
 
 
@@ -82,31 +82,65 @@ async def list_agent_types():
     return service.get_registered_types()
 
 
+@router.get("/agent/active")
+async def get_active_agents():
+    """Returns the currently active agent and list of all running agents."""
+    return {
+        "active_agent_name": service.active_agent_name,
+        "running_agents": service.list_running_agents(),
+    }
+
+
+@router.post("/agent/switch")
+async def switch_active_agent(req: SwitchAgentRequest):
+    """Switches active agent focus in the container."""
+    try:
+        service.set_active_agent(req.agent_name)
+        return {
+            "status": "switched",
+            "active_agent_name": service.active_agent_name,
+            "running_agents": service.list_running_agents(),
+        }
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/workspace/agents")
+async def scan_workspace_agents(path: str = "."):
+    """Scans <workspace_path>/.well_known/<agent_name>.json for A2A Agent Cards."""
+    return service.scan_workspace_well_known_agents(path)
+
+
 @router.post("/agent/init")
 async def init_agent(req: InitRequest):
-    """Initializes and runs the requested agent type."""
+    """Initializes and runs the requested agent type as an independent URPHost."""
     host = await service.initialize_agent(
         agent_type=req.agent_type,
         workspace_path=req.workspace_path,
         conversation_id=req.conversation_id,
         configuration=req.configuration,
+        agent_name=req.agent_name,
     )
     return {
         "status": "initialized",
         "agent_id": host.descriptor.agent_id if host else "unknown",
+        "agent_name": host.descriptor.name if host else req.agent_type,
         "agent_type": req.agent_type,
+        "active_agent_name": service.active_agent_name,
+        "running_agents": service.list_running_agents(),
     }
 
 
-@app_message_route := router.post("/agent/message")
+@router.post("/agent/message")
 async def send_message(req: MessageRequest):
-    """Sends a message to the agent's mailbox."""
+    """Sends a message to the target agent's mailbox."""
     try:
         msg_id = await service.send_message(
             message_type=req.message_type,
             payload=req.payload,
             context_id=req.context_id,
             task_id=req.task_id,
+            agent_name=req.agent_name,
         )
         return {"message_id": msg_id}
     except Exception as e:
@@ -114,9 +148,9 @@ async def send_message(req: MessageRequest):
 
 
 @router.get("/agent/state")
-async def get_state():
-    """Returns read-only telemetry and state for the active agent."""
-    return service.get_state()
+async def get_state(agent_name: Optional[str] = None):
+    """Returns read-only telemetry and state for the requested or active agent."""
+    return service.get_state(agent_name=agent_name)
 
 
 @router.get("/agent/conversations")
@@ -132,12 +166,13 @@ async def get_conversation_history(workspace_path: str, conversation_id: str):
 
 
 @router.post("/agent/conversations/save")
-async def save_conversation(req: SaveConversationRequest):
+async def save_conversation(req: SaveConversationRequest, agent_name: Optional[str] = None):
     """Saves the current active conversation ID with a human-readable name."""
-    if not service.host or not service.host.agent or not hasattr(service.host.agent, "get_conversation_id"):
+    host = service.get_host(agent_name)
+    if not host or not host.agent or not hasattr(host.agent, "get_conversation_id"):
         return {"status": "error", "message": "Agent does not support conversation persistence"}
 
-    conv_id = service.host.agent.get_conversation_id()
+    conv_id = host.agent.get_conversation_id()
     if not conv_id:
         return {"status": "error", "message": "No active conversation ID"}
 

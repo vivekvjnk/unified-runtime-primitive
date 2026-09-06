@@ -1,8 +1,8 @@
 {
-  "name": "echo",
+  "name": "echo_agent",
   "descriptor": {
-    "agent_id": "vhl.echo.v1",
-    "name": "Echo Diagnostic Agent",
+    "agent_id": "echo_agent",
+    "name": "echo_agent",
     "version": "1.0.0",
     "description": "Minimal reference agent that echoes incoming messages back over the event bus.",
     "capabilities": ["ECHO"],

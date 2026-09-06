@@ -2,7 +2,7 @@
 
 Standard Endpoints:
 - GET /.well-known/agent.json (Agent Card discovery)
-- GET /a2a/v1/agents (Catalog of all registered agent cards)
+- GET /a2a/v1/agents (Catalog of all registered & running agent cards)
 - POST /message:send (Synchronous message dispatch)
 - POST /message:stream (Streaming turn with SSE text/event-stream)
 - GET /tasks/{id} (Task query)
@@ -38,7 +38,8 @@ from urp.a2a.models import (
 from urp.a2a.task_manager import task_manager
 from urp.a2a.translator import A2ATranslator
 from urp.core import get_registered_agent_types
-from urp.web.agent_service import AgentHostingService
+from urp.core.host import URPHost
+from urp.web.agent_service import AgentHostingService, normalize_agent_name
 
 logger = logging.getLogger("urp.a2a.router")
 
@@ -47,9 +48,47 @@ a2a_router = APIRouter(tags=["A2A Protocol"])
 
 def _get_hosting_service(request: Request) -> AgentHostingService:
     """Retrieves the global AgentHostingService instance from the web app state."""
-    # If app.state.service exists, use it; otherwise fallback to imported singleton
     from urp.web.routes import service
     return service
+
+
+def _resolve_target_host(
+    request: Request,
+    req_body: Optional[SendMessageRequest] = None,
+    explicit_agent: Optional[str] = None,
+) -> URPHost:
+    """
+    Resolves the targeted URPHost for multi-agent dispatch:
+    1. Explicit parameter if passed
+    2. Header: X-Target-Agent or X-Agent-Name
+    3. Query parameter: ?agent_name=... or ?agent_id=...
+    4. Request body metadata: req_body.metadata["target_agent"] or req_body.message.metadata["target_agent"]
+    5. Fallback to active running agent in AgentHostingService
+    """
+    service = _get_hosting_service(request)
+
+    target_name: Optional[str] = explicit_agent
+
+    if not target_name:
+        target_name = request.headers.get("X-Target-Agent") or request.headers.get("X-Agent-Name")
+
+    if not target_name:
+        target_name = request.query_params.get("agent_name") or request.query_params.get("agent_id")
+
+    if not target_name and req_body:
+        if req_body.metadata and "target_agent" in req_body.metadata:
+            target_name = str(req_body.metadata["target_agent"])
+        elif req_body.message.metadata and "target_agent" in req_body.message.metadata:
+            target_name = str(req_body.message.metadata["target_agent"])
+
+    host = service.get_host(target_name)
+    if not host or not host.agent:
+        active_list = list(service.hosts.keys())
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Target agent '{target_name or 'active'}' is not currently running. Running agents: {active_list}. Please initialize the agent first.",
+        )
+    return host
 
 
 # ---------------------------------------------------------------------------
@@ -57,15 +96,29 @@ def _get_hosting_service(request: Request) -> AgentHostingService:
 # ---------------------------------------------------------------------------
 
 @a2a_router.get("/.well-known/agent.json", response_model=AgentCard)
-async def get_well_known_agent_card(request: Request):
-    """Returns the active agent's self-describing Agent Card."""
+async def get_well_known_agent_card(request: Request, agent_name: Optional[str] = None):
+    """
+    Returns the self-describing Agent Card.
+    Supports ?agent_name=... or defaults to the currently active agent.
+    """
     service = _get_hosting_service(request)
     base_url = str(request.base_url).rstrip("/")
 
-    if service.host and service.host.descriptor:
-        return A2ATranslator.descriptor_to_agent_card(service.host.descriptor, base_url=base_url)
+    # Check query param or header
+    target = agent_name or request.headers.get("X-Target-Agent") or request.headers.get("X-Agent-Name")
+    host = service.get_host(target)
 
-    # If no agent running yet, pick first registered or fallback
+    if host and host.descriptor:
+        return A2ATranslator.descriptor_to_agent_card(host.descriptor, base_url=base_url)
+
+    # If no running host found for specific name, check registered descriptors
+    if target:
+        norm = normalize_agent_name(target)
+        desc = get_registered_agent_types().get(norm) or get_registered_agent_types().get(target)
+        if desc:
+            return A2ATranslator.descriptor_to_agent_card(desc, base_url=base_url)
+
+    # Fallback to first registered agent
     types = service.get_registered_types()
     if types:
         first_desc = get_registered_agent_types().get(types[0]["id"])
@@ -77,10 +130,30 @@ async def get_well_known_agent_card(request: Request):
 
 @a2a_router.get("/a2a/v1/agents", response_model=List[AgentCard])
 async def list_agent_cards(request: Request):
-    """Returns all registered agent cards available in this URP host catalog."""
+    """
+    Returns all registered agent cards available in this URP host catalog,
+    prioritizing currently running active hosts.
+    """
+    service = _get_hosting_service(request)
     base_url = str(request.base_url).rstrip("/")
-    descriptors = get_registered_agent_types()
-    return [A2ATranslator.descriptor_to_agent_card(desc, base_url=base_url) for desc in descriptors.values()]
+    descriptors = dict(get_registered_agent_types())
+
+    # Ensure all running hosts' actual runtime descriptors are present
+    cards: List[AgentCard] = []
+    seen_names = set()
+
+    for name, host in service.hosts.items():
+        if host.descriptor:
+            cards.append(A2ATranslator.descriptor_to_agent_card(host.descriptor, base_url=base_url))
+            seen_names.add(normalize_agent_name(host.descriptor.name))
+
+    for name, desc in descriptors.items():
+        norm_name = normalize_agent_name(name)
+        if norm_name not in seen_names:
+            cards.append(A2ATranslator.descriptor_to_agent_card(desc, base_url=base_url))
+            seen_names.add(norm_name)
+
+    return cards
 
 
 # ---------------------------------------------------------------------------
@@ -89,13 +162,8 @@ async def list_agent_cards(request: Request):
 
 @a2a_router.post("/message:send", response_model=SendMessageResponse)
 async def send_message_sync(req: SendMessageRequest, request: Request):
-    """Sends a message to the agent and waits for task completion (or returns task immediately if configured)."""
-    service = _get_hosting_service(request)
-    if not service.host or not service.host.agent:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No URP agent is currently deployed. Please initialize an agent first.",
-        )
+    """Sends a message to the target agent and waits for task completion."""
+    host = _resolve_target_host(request, req_body=req)
 
     # 1. Anchor Context and Task IDs
     msg = req.message
@@ -117,7 +185,6 @@ async def send_message_sync(req: SendMessageRequest, request: Request):
         sender="a2a_client",
         message_type="MESSAGE",
     )
-    # Enable streaming events on envelope if clients may subscribe to this task
     envelope.streaming = True
 
     # Check return_immediately configuration
@@ -126,9 +193,7 @@ async def send_message_sync(req: SendMessageRequest, request: Request):
     )
 
     if return_immediately:
-        # Launch background event bridge so ongoing task state, tool events, and completion
-        # are recorded into task_manager and broadcast to SSE subscribers (/tasks/{id}:subscribe)
-        host_listener = service.host.add_listener()
+        host_listener = host.add_listener()
 
         async def bridge_async_task_events():
             try:
@@ -166,20 +231,19 @@ async def send_message_sync(req: SendMessageRequest, request: Request):
                         logger.error(f"Error in async task event bridge: {e}")
                         break
             finally:
-                if service.host:
-                    service.host.remove_listener(host_listener)
+                host.remove_listener(host_listener)
 
-        await service.host.agent.send(envelope)
+        await host.agent.send(envelope)
         asyncio.create_task(bridge_async_task_events())
         return SendMessageResponse(task=task)
 
     # Wait for completion via event loop polling
     timeout = 120.0
     start_time = asyncio.get_running_loop().time()
-    host_listener = service.host.add_listener()
+    host_listener = host.add_listener()
 
     # Dispatch to mailbox now that listener is attached
-    await service.host.agent.send(envelope)
+    await host.agent.send(envelope)
 
     try:
         while True:
@@ -218,8 +282,7 @@ async def send_message_sync(req: SendMessageRequest, request: Request):
             except asyncio.TimeoutError:
                 pass
     finally:
-        if service.host:
-            service.host.remove_listener(host_listener)
+        host.remove_listener(host_listener)
 
 
 # ---------------------------------------------------------------------------
@@ -228,13 +291,8 @@ async def send_message_sync(req: SendMessageRequest, request: Request):
 
 @a2a_router.post("/message:stream")
 async def send_message_stream(req: SendMessageRequest, request: Request):
-    """Sends a message with real-time SSE streaming (Server-Sent Events)."""
-    service = _get_hosting_service(request)
-    if not service.host or not service.host.agent:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No URP agent is currently deployed. Please initialize an agent first.",
-        )
+    """Sends a message to the target agent with real-time SSE streaming (Server-Sent Events)."""
+    host = _resolve_target_host(request, req_body=req)
 
     # 1. Setup IDs
     msg = req.message
@@ -255,19 +313,17 @@ async def send_message_stream(req: SendMessageRequest, request: Request):
     )
     envelope.streaming = True
 
-    # 4. Background consumer pulling from URPHost and feeding task_manager
-    host_listener = service.host.add_listener()
+    # 4. Background consumer pulling from target URPHost and feeding task_manager
+    host_listener = host.add_listener()
 
     async def bridge_host_events():
         try:
             while True:
                 try:
                     evt = await asyncio.wait_for(host_listener.get(), timeout=0.5)
-                    # Filter events: if event has a task_id and it belongs to another task, ignore
                     if evt.task_id and evt.task_id != tid:
                         continue
 
-                    # Anchor IDs to this task if absent
                     if not evt.task_id:
                         evt.task_id = tid
                     if not evt.context_id:
@@ -289,7 +345,6 @@ async def send_message_stream(req: SendMessageRequest, request: Request):
                     if evt.type in ("TASK_COMPLETED", "TASK_FAILED", "TASK_PRECONDITIONS_VIOLATED", "TASK_POSTCONDITIONS_VIOLATED"):
                         break
                 except asyncio.TimeoutError:
-                    # Check if task already terminated
                     t = await task_manager.get_task(tid)
                     if t and t.status.state in (TaskState.TASK_STATE_COMPLETED, TaskState.TASK_STATE_FAILED, TaskState.TASK_STATE_CANCELED):
                         break
@@ -297,17 +352,15 @@ async def send_message_stream(req: SendMessageRequest, request: Request):
                     logger.error(f"Error bridging host events: {e}")
                     break
         finally:
-            if service.host:
-                service.host.remove_listener(host_listener)
+            host.remove_listener(host_listener)
 
     # Dispatch envelope and launch event bridge
-    await service.host.agent.send(envelope)
+    await host.agent.send(envelope)
     asyncio.create_task(bridge_host_events())
 
     # 5. SSE Generator function
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
-            # Yield initial task state snapshot
             initial_resp = StreamResponse(task=task)
             yield f"data: {initial_resp.model_dump_json(by_alias=True, exclude_none=True)}\n\n"
 
@@ -316,7 +369,6 @@ async def send_message_stream(req: SendMessageRequest, request: Request):
                     resp = await asyncio.wait_for(queue.get(), timeout=60.0)
                     yield f"data: {resp.model_dump_json(by_alias=True, exclude_none=True)}\n\n"
 
-                    # If terminal, terminate SSE stream cleanly
                     if resp.status_update and resp.status_update.status.state in (
                         TaskState.TASK_STATE_COMPLETED,
                         TaskState.TASK_STATE_FAILED,
@@ -324,7 +376,6 @@ async def send_message_stream(req: SendMessageRequest, request: Request):
                     ):
                         break
                 except asyncio.TimeoutError:
-                    # Keep-alive heartbeat comment
                     yield ": keep-alive\n\n"
         finally:
             await task_manager.unsubscribe(tid, queue)
@@ -342,9 +393,6 @@ async def send_message_stream(req: SendMessageRequest, request: Request):
 
 # ---------------------------------------------------------------------------
 # 4. Task Operations: Get, List, Cancel, Subscribe
-# Note: Specific action routes like :subscribe and :cancel must be registered
-# BEFORE generic parameterized routes like /tasks/{task_id} so Starlette's
-# regex router matches :subscribe rather than capturing it inside {task_id}.
 # ---------------------------------------------------------------------------
 
 @a2a_router.get("/tasks", response_model=List[A2ATask])
@@ -381,7 +429,6 @@ async def subscribe_task_stream(task_id: str):
 
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
-            # Send current task state snapshot
             initial_resp = StreamResponse(task=task)
             yield f"data: {initial_resp.model_dump_json(by_alias=True, exclude_none=True)}\n\n"
 
