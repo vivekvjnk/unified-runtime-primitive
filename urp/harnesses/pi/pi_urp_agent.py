@@ -276,6 +276,18 @@ class PiURPAgent(AbstractURPAgent):
                 text=f"Execution error: {str(e)}"
             )
 
+    async def get_raw_log_path(self) -> Optional[str]:
+        """Queries the underlying Pi RPC harness for the active JSONL session log file."""
+        if not self.pi_client or not self.pi_client.is_running:
+            return None
+        try:
+            state_resp = await self.pi_client.get_state()
+            if state_resp.success and state_resp.data:
+                return state_resp.data.get("sessionFile")
+        except Exception as e:
+            logger.warning(f"[{self.descriptor.agent_id}] Could not retrieve raw session log path: {e}")
+        return None
+
     async def _on_shutdown(self) -> None:
         """URP Shutdown Hook: Closes PiRpcClient subprocess."""
         if self.pi_client:

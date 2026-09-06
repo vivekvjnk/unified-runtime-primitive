@@ -24,6 +24,10 @@ let currentTaskId = generateId('task-');
 let activeStreamCard = null;
 let currentStreamText = '';
 
+// Active tools grouped container for current turn
+let activeToolsGroup = null;
+let activeToolsCount = 0;
+
 function generateId(prefix='') {
     return prefix + Math.random().toString(36).substring(2, 10);
 }
@@ -117,14 +121,66 @@ function finalizeStreamingCard(fullText) {
         if (body) {
             body.innerHTML = marked.parse(currentStreamText);
         }
+        // Ensure final card stays at bottom after tools group
+        consoleDiv.appendChild(activeStreamCard);
     } else if (fullText) {
         addLog(fullText, 'agent-msg');
     }
     activeStreamCard = null;
     currentStreamText = '';
+    activeToolsGroup = null;
+    activeToolsCount = 0;
+}
+
+function getOrCreateToolsGroup() {
+    if (!activeToolsGroup) {
+        const details = document.createElement('details');
+        details.className = 'tools-group-box';
+
+        const summary = document.createElement('summary');
+        summary.className = 'tools-group-summary';
+
+        const countBadge = document.createElement('span');
+        countBadge.className = 'tools-group-count';
+        countBadge.textContent = '1 tool';
+
+        const textSpan = document.createElement('span');
+        textSpan.textContent = 'Tools & Operations';
+
+        summary.appendChild(countBadge);
+        summary.appendChild(textSpan);
+        details.appendChild(summary);
+
+        const body = document.createElement('div');
+        body.className = 'tools-group-body';
+        details.appendChild(body);
+
+        // Position tools group before the active streaming card if it already exists
+        if (activeStreamCard && activeStreamCard.parentNode === consoleDiv) {
+            consoleDiv.insertBefore(details, activeStreamCard);
+        } else {
+            consoleDiv.appendChild(details);
+        }
+
+        activeToolsGroup = details;
+        activeToolsCount = 0;
+    }
+    return activeToolsGroup;
+}
+
+function updateToolsGroupHeader() {
+    if (!activeToolsGroup) return;
+    const countBadge = activeToolsGroup.querySelector('.tools-group-count');
+    if (countBadge) {
+        countBadge.textContent = `${activeToolsCount} tool${activeToolsCount === 1 ? '' : 's'}`;
+    }
 }
 
 function addToolCallLog(toolName, argsStr, resultStr, isSubtask=false) {
+    const group = getOrCreateToolsGroup();
+    activeToolsCount += 1;
+    updateToolsGroupHeader();
+
     const details = document.createElement('details');
     details.className = 'tool-call-box';
 
@@ -161,7 +217,17 @@ function addToolCallLog(toolName, argsStr, resultStr, isSubtask=false) {
     body.textContent = formattedContent;
     details.appendChild(body);
 
-    consoleDiv.appendChild(details);
+    const groupBody = group.querySelector('.tools-group-body');
+    if (groupBody) {
+        groupBody.appendChild(details);
+    } else {
+        group.appendChild(details);
+    }
+
+    // Ensure active streaming agent card remains visually below the tools group
+    if (activeStreamCard && activeStreamCard.parentNode === consoleDiv) {
+        consoleDiv.appendChild(activeStreamCard);
+    }
     consoleDiv.scrollTop = consoleDiv.scrollHeight;
 }
 
@@ -204,20 +270,28 @@ async function inspectCatalog() {
 }
 
 async function loadAgentTypes() {
+    const select = document.getElementById('agentType');
     try {
         const res = await fetch('/agent/types');
+        if (!res.ok) {
+            console.error('Failed fetching /agent/types:', res.statusText);
+            if (select) select.innerHTML = '<option value="">Error loading agents</option>';
+            return;
+        }
         registeredAgents = await res.json();
-        const select = document.getElementById('agentType');
-        select.innerHTML = '';
-        registeredAgents.forEach(agent => {
-            const opt = document.createElement('option');
-            opt.value = agent.id;
-            opt.textContent = `${agent.name} (${agent.id})`;
-            select.appendChild(opt);
-        });
-        onAgentTypeChanged();
+        if (select) {
+            select.innerHTML = '';
+            registeredAgents.forEach(agent => {
+                const opt = document.createElement('option');
+                opt.value = agent.id;
+                opt.textContent = `${agent.name} (${agent.id})`;
+                select.appendChild(opt);
+            });
+            onAgentTypeChanged();
+        }
     } catch (e) {
         console.error('Failed loading agent types:', e);
+        if (select) select.innerHTML = '<option value="">Failed loading agents</option>';
     }
 }
 
@@ -277,6 +351,8 @@ async function dispatchA2ATurn() {
 async function executeStreamTurn(text, contextId, taskId) {
     activeStreamCard = null;
     currentStreamText = '';
+    activeToolsGroup = null;
+    activeToolsCount = 0;
     statusDot.className = 'dot busy';
     statusText.textContent = 'A2A Streaming...';
 
@@ -336,6 +412,8 @@ async function executeStreamTurn(text, contextId, taskId) {
 
 // B. Mode: Sync / Async Message (POST /message:send)
 async function executeSyncMessage(text, contextId, taskId, returnImmediately) {
+    activeToolsGroup = null;
+    activeToolsCount = 0;
     statusDot.className = 'dot busy';
     statusText.textContent = returnImmediately ? 'A2A Dispatching...' : 'A2A Executing...';
 
@@ -365,6 +443,14 @@ async function executeSyncMessage(text, contextId, taskId, returnImmediately) {
         if (data.task) {
             const t = data.task;
             addLog(`Task [${t.id}] Status: ${t.status.state}`, 'system-info');
+
+            // If async dispatch (returnImmediately = true), automatically attach SSE subscriber stream
+            // to follow ongoing execution (text chunks, tools, and completion) in real time
+            if (returnImmediately) {
+                await followOngoingTaskStream(t.id);
+                return;
+            }
+
             if (t.status.message && t.status.message.parts) {
                 const responseText = t.status.message.parts.map(p => p.text).filter(Boolean).join('\n');
                 if (responseText) {
@@ -380,7 +466,56 @@ async function executeSyncMessage(text, contextId, taskId, returnImmediately) {
     }
 }
 
-// C. Stream event handler
+// C. Follow Ongoing Task Stream via GET /tasks/{id}:subscribe
+async function followOngoingTaskStream(taskId) {
+    statusDot.className = 'dot busy';
+    statusText.textContent = 'A2A Task Streaming...';
+    activeStreamCard = null;
+    currentStreamText = '';
+
+    try {
+        const response = await fetch(`/tasks/${encodeURIComponent(taskId)}:subscribe`, {
+            headers: { 'Accept': 'text/event-stream' }
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            addLog(`Subscription error: ${err.detail || response.statusText}`, 'error');
+            return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop();
+
+            for (const block of lines) {
+                if (!block.trim() || block.startsWith(':')) continue;
+                const dataLine = block.split('\n').find(l => l.startsWith('data: '));
+                if (!dataLine) continue;
+
+                const rawJson = dataLine.substring(6);
+                try {
+                    const streamResp = JSON.parse(rawJson);
+                    handleA2AStreamResponse(streamResp);
+                } catch (parseErr) {
+                    console.error('Error parsing SSE json:', parseErr, rawJson);
+                }
+            }
+        }
+    } catch (e) {
+        addLog(`Error following task stream: ${e}`, 'error');
+    }
+}
+
+// D. Stream event handler
 function handleA2AStreamResponse(resp) {
     if (resp.task) {
         console.log('Task initialized:', resp.task.id);
@@ -622,7 +757,16 @@ document.getElementById('messageInput').addEventListener('keydown', function(e) 
 });
 
 // Initial boot
-updateIdDisplays();
-loadAgentTypes();
-discoverAgentCard();
-setInterval(updateStatus, 3000);
+document.addEventListener('DOMContentLoaded', () => {
+    updateIdDisplays();
+    loadAgentTypes();
+    discoverAgentCard();
+    setInterval(updateStatus, 3000);
+});
+
+// Fallback execution if DOMContentLoaded already fired
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    updateIdDisplays();
+    loadAgentTypes();
+    discoverAgentCard();
+}

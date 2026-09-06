@@ -14,6 +14,7 @@ from .workspace_service import (
     load_conversation_history,
     save_workspace_conversation,
 )
+from .pi_log_parser import parse_pi_session_log
 
 router = APIRouter()
 service = AgentHostingService()
@@ -27,6 +28,52 @@ async def get_console_ui():
     index_file = TEMPLATES_DIR / "index.html"
     with open(index_file, "r", encoding="utf-8") as f:
         return f.read()
+
+
+@router.get("/logs", response_class=HTMLResponse)
+async def get_logs_ui():
+    """Serves the dedicated Pi Agent Raw LLM Response Monitor dashboard."""
+    logs_file = TEMPLATES_DIR / "logs.html"
+    with open(logs_file, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@router.get("/agent/pi/raw-logs")
+async def get_pi_raw_logs(limit: int = 50):
+    """Retrieves structured LLM interaction turns from the active Pi agent harness session log."""
+    if not service.host or not service.host.agent:
+        return {
+            "error": "No active URP agent is currently running.",
+            "is_pi_agent": False,
+            "turns": [],
+            "stats": {},
+        }
+
+    agent = service.host.agent
+    # Check if this agent is a PiURPAgent harness or exposes get_raw_log_path
+    if not hasattr(agent, "get_raw_log_path"):
+        return {
+            "error": f"Active agent ({service.host.descriptor.name}) is not a Pi harness agent and does not provide JSONL session logs.",
+            "is_pi_agent": False,
+            "agent_type": service.host.descriptor.agent_id,
+            "turns": [],
+            "stats": {},
+        }
+
+    session_path = await agent.get_raw_log_path()
+    if not session_path:
+        return {
+            "error": "Pi RPC client is not running or has not yet written a session file.",
+            "is_pi_agent": True,
+            "turns": [],
+            "stats": {},
+        }
+
+    parsed = parse_pi_session_log(session_path, max_turns=limit)
+    parsed["is_pi_agent"] = True
+    parsed["agent_id"] = service.host.descriptor.agent_id
+    parsed["agent_name"] = service.host.descriptor.name
+    return parsed
 
 
 @router.get("/agent/types")

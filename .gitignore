@@ -3,3 +3,5 @@ uv.lock
 **egg-info
 .venv
 .git
+agent_workspace/
+SUMMARY.md

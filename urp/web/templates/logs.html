@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>URP-HF | Pi Agent Raw LLM Monitor</title>
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <link rel="stylesheet" href="/static/css/logs.css">
+    </head>
+    <body class="logs-page">
+        <header class="monitor-header">
+            <div class="monitor-title-group">
+                <a href="/" style="text-decoration:none; color:var(--text-dim); font-size:0.85rem;">← Back to Chat Console</a>
+                <h1 style="font-size:1.15rem; color:var(--primary); margin:0;">Pi Agent Raw LLM Monitor</h1>
+                <span class="monitor-badge">Pi Harness Only</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:1.25rem;">
+                <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.8rem; cursor:pointer; text-transform:none; color:var(--text-main);">
+                    <input type="checkbox" id="autoRefreshCheckbox" checked style="width:auto; margin:0;">
+                    <span>Auto-refresh (3s)</span>
+                </label>
+                <button class="secondary" onclick="fetchAndRenderLogs()" style="padding:0.35rem 0.75rem;">Refresh</button>
+            </div>
+        </header>
+
+        <!-- Metrics Banner Bar -->
+        <div class="metrics-banner">
+            <div class="metric-card">
+                <span class="metric-label">Model</span>
+                <span id="statModel" class="metric-value highlight">-</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Provider</span>
+                <span id="statProvider" class="metric-value">-</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Input Tokens</span>
+                <span id="statInputTokens" class="metric-value">-</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Output Tokens</span>
+                <span id="statOutputTokens" class="metric-value">-</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Thinking Tokens</span>
+                <span id="statReasoningTokens" class="metric-value highlight">-</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Total Tokens</span>
+                <span id="statTotalTokens" class="metric-value accent">-</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Estimated Cost</span>
+                <span id="statCost" class="metric-value">-</span>
+            </div>
+            <div class="metric-card" style="margin-left:auto; max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                <span class="metric-label">Active Session File</span>
+                <span id="sessionFilePath" class="metric-value" style="font-size:0.75rem; color:var(--text-dim);" title="Session File">-</span>
+            </div>
+        </div>
+
+        <!-- Structured Turns Container -->
+        <main id="turnsContainer"></main>
+
+        <script src="/static/js/logs.js"></script>
+    </body>
+</html>

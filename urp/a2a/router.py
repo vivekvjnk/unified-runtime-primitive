@@ -117,23 +117,69 @@ async def send_message_sync(req: SendMessageRequest, request: Request):
         sender="a2a_client",
         message_type="MESSAGE",
     )
-    envelope.streaming = False
+    # Enable streaming events on envelope if clients may subscribe to this task
+    envelope.streaming = True
 
     # Check return_immediately configuration
     return_immediately = bool(
         req.configuration and req.configuration.return_immediately
     )
 
-    # Dispatch to mailbox
-    await service.host.agent.send(envelope)
-
     if return_immediately:
+        # Launch background event bridge so ongoing task state, tool events, and completion
+        # are recorded into task_manager and broadcast to SSE subscribers (/tasks/{id}:subscribe)
+        host_listener = service.host.add_listener()
+
+        async def bridge_async_task_events():
+            try:
+                while True:
+                    try:
+                        evt = await asyncio.wait_for(host_listener.get(), timeout=0.5)
+                        if evt.task_id and evt.task_id != tid:
+                            continue
+
+                        if not evt.task_id:
+                            evt.task_id = tid
+                        if not evt.context_id:
+                            evt.context_id = cid
+
+                        stream_resp = A2ATranslator.envelope_to_stream_response(evt)
+                        if stream_resp:
+                            if stream_resp.status_update:
+                                su = stream_resp.status_update
+                                await task_manager.update_task_status(
+                                    task_id=tid,
+                                    state=su.status.state,
+                                    message=su.status.message,
+                                    metadata=su.metadata,
+                                )
+                            else:
+                                await task_manager.publish_event(tid, stream_resp)
+
+                        if evt.type in ("TASK_COMPLETED", "TASK_FAILED", "TASK_PRECONDITIONS_VIOLATED", "TASK_POSTCONDITIONS_VIOLATED"):
+                            break
+                    except asyncio.TimeoutError:
+                        t = await task_manager.get_task(tid)
+                        if t and t.status.state in (TaskState.TASK_STATE_COMPLETED, TaskState.TASK_STATE_FAILED, TaskState.TASK_STATE_CANCELED):
+                            break
+                    except Exception as e:
+                        logger.error(f"Error in async task event bridge: {e}")
+                        break
+            finally:
+                if service.host:
+                    service.host.remove_listener(host_listener)
+
+        await service.host.agent.send(envelope)
+        asyncio.create_task(bridge_async_task_events())
         return SendMessageResponse(task=task)
 
     # Wait for completion via event loop polling
     timeout = 120.0
     start_time = asyncio.get_running_loop().time()
     host_listener = service.host.add_listener()
+
+    # Dispatch to mailbox now that listener is attached
+    await service.host.agent.send(envelope)
 
     try:
         while True:
@@ -296,19 +342,10 @@ async def send_message_stream(req: SendMessageRequest, request: Request):
 
 # ---------------------------------------------------------------------------
 # 4. Task Operations: Get, List, Cancel, Subscribe
+# Note: Specific action routes like :subscribe and :cancel must be registered
+# BEFORE generic parameterized routes like /tasks/{task_id} so Starlette's
+# regex router matches :subscribe rather than capturing it inside {task_id}.
 # ---------------------------------------------------------------------------
-
-@a2a_router.get("/tasks/{task_id}", response_model=A2ATask)
-async def get_task_status(task_id: str):
-    """Retrieves latest state, artifacts, and history of a task."""
-    task = await task_manager.get_task(task_id)
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with ID '{task_id}' not found",
-        )
-    return task
-
 
 @a2a_router.get("/tasks", response_model=List[A2ATask])
 async def list_tasks(
@@ -318,34 +355,6 @@ async def list_tasks(
 ):
     """Lists tasks with optional context and status filtering."""
     return await task_manager.list_tasks(context_id=context_id, status=status, limit=limit)
-
-
-@a2a_router.post("/tasks/{task_id}:cancel", response_model=A2ATask)
-async def cancel_task(task_id: str, req: Optional[CancelTaskRequest] = None):
-    """Cancels a task in progress."""
-    task = await task_manager.get_task(task_id)
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with ID '{task_id}' not found",
-        )
-
-    if task.status.state in (
-        TaskState.TASK_STATE_COMPLETED,
-        TaskState.TASK_STATE_FAILED,
-        TaskState.TASK_STATE_CANCELED,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Task '{task_id}' is already in terminal state: {task.status.state.value}",
-        )
-
-    updated = await task_manager.update_task_status(
-        task_id=task_id,
-        state=TaskState.TASK_STATE_CANCELED,
-        message=A2AMessage.from_text("Task canceled by client", role=Role.ROLE_AGENT),
-    )
-    return updated or task
 
 
 @a2a_router.get("/tasks/{task_id}:subscribe")
@@ -400,3 +409,43 @@ async def subscribe_task_stream(task_id: str):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@a2a_router.post("/tasks/{task_id}:cancel", response_model=A2ATask)
+async def cancel_task(task_id: str, req: Optional[CancelTaskRequest] = None):
+    """Cancels a task in progress."""
+    task = await task_manager.get_task(task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task with ID '{task_id}' not found",
+        )
+
+    if task.status.state in (
+        TaskState.TASK_STATE_COMPLETED,
+        TaskState.TASK_STATE_FAILED,
+        TaskState.TASK_STATE_CANCELED,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Task '{task_id}' is already in terminal state: {task.status.state.value}",
+        )
+
+    updated = await task_manager.update_task_status(
+        task_id=task_id,
+        state=TaskState.TASK_STATE_CANCELED,
+        message=A2AMessage.from_text("Task canceled by client", role=Role.ROLE_AGENT),
+    )
+    return updated or task
+
+
+@a2a_router.get("/tasks/{task_id}", response_model=A2ATask)
+async def get_task_status(task_id: str):
+    """Retrieves latest state, artifacts, and history of a task."""
+    task = await task_manager.get_task(task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task with ID '{task_id}' not found",
+        )
+    return task

@@ -248,15 +248,57 @@ button.danger:hover { background: var(--danger-hover); }
     color: var(--text-dim);
 }
 
-.tool-call-box {
+/* Collapsible Tools Used Container */
+.tools-group-box {
     align-self: flex-start;
     background: var(--tool-bg);
     border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 0.35rem 0;
+    max-width: 90%;
+    width: auto;
+    font-size: 0.82rem;
+}
+.tools-group-summary {
+    padding: 0.5rem 0.85rem;
+    cursor: pointer;
+    color: var(--primary);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    user-select: none;
+    border-radius: 8px;
+    transition: background 0.15s ease;
+}
+.tools-group-summary:hover {
+    background: rgba(56, 189, 248, 0.08);
+}
+.tools-group-count {
+    background: rgba(56, 189, 248, 0.2);
+    color: var(--primary);
+    padding: 0.15rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+.tools-group-body {
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.tool-call-box {
+    align-self: flex-start;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    margin: 0.25rem 0;
+    margin: 0.15rem 0;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.8rem;
-    max-width: 85%;
+    width: 100%;
 }
 .tool-call-box summary {
     padding: 0.45rem 0.75rem;
