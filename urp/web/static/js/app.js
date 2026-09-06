@@ -321,9 +321,68 @@ function renderAgentTabs() {
         pill.appendChild(dot);
         pill.appendChild(nameSpan);
 
+        // Add a small inline close/stop button (✕)
+        const closeBtn = document.createElement('span');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.className = 'agent-tab-close-btn';
+        closeBtn.title = `Stop agent ${agent.agent_name}`;
+        closeBtn.onclick = (e) => {
+            e.stopPropagation();
+            stopSpecificAgent(agent.agent_name);
+        };
+        pill.appendChild(closeBtn);
+
         pill.onclick = () => switchActiveAgent(agent.agent_name);
         agentTabsContainer.appendChild(pill);
     });
+}
+
+async function stopActiveAgent() {
+    if (!currentActiveAgent) {
+        alert('No active agent is running.');
+        return;
+    }
+    await stopSpecificAgent(currentActiveAgent);
+}
+
+async function stopSpecificAgent(agentName) {
+    if (!confirm(`Are you sure you want to stop agent '${agentName}'?`)) {
+        return;
+    }
+
+    addLog(`Stopping agent ${agentName}...`, 'system-info');
+    try {
+        const res = await fetch('/agent/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agent_name: agentName })
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            alert('Failed stopping agent: ' + (err.detail || res.statusText));
+            return;
+        }
+
+        const data = await res.json();
+        addLog(`Agent ${agentName} has been stopped.`, 'system-info');
+
+        currentActiveAgent = data.active_agent_name;
+        runningAgents = data.running_agents || [];
+
+        renderAgentTabs();
+        updateActiveAgentBadge();
+
+        if (currentActiveAgent) {
+            await switchActiveAgent(currentActiveAgent);
+        } else {
+            consoleDiv.innerHTML = '';
+            addLog('All agents stopped. Ready to deploy an agent.', 'system-info');
+            updateStatus();
+        }
+    } catch (e) {
+        console.error('Error stopping agent:', e);
+        alert('Error stopping agent: ' + e);
+    }
 }
 
 async function switchActiveAgent(agentName) {

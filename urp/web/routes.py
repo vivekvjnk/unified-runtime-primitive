@@ -13,6 +13,7 @@ from .schemas import (
     InitRequest,
     MessageRequest,
     SaveConversationRequest,
+    StopAgentRequest,
     SwitchAgentRequest,
 )
 from .workspace_service import (
@@ -111,6 +112,26 @@ async def switch_active_agent(req: SwitchAgentRequest):
         }
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/agent/stop")
+async def stop_agent(req: StopAgentRequest):
+    """Gracefully shuts down a specific running agent or the currently active agent."""
+    target_name = req.agent_name or service.active_agent_name
+    if not target_name:
+        raise HTTPException(status_code=400, detail="No active agent to stop")
+
+    norm_name = normalize_agent_name(target_name)
+    if norm_name not in service.hosts and target_name not in service.hosts:
+        raise HTTPException(status_code=404, detail=f"No running agent found for '{target_name}'")
+
+    await service.shutdown(agent_name=norm_name)
+    return {
+        "status": "stopped",
+        "stopped_agent": norm_name,
+        "active_agent_name": service.active_agent_name,
+        "running_agents": service.list_running_agents(),
+    }
 
 
 @router.get("/workspace/agents")

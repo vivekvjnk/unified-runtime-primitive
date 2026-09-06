@@ -178,3 +178,13 @@ async def test_a2a_multiagent_routing(temp_workspace):
         assert data2["task"] is not None
         assert data2["task"]["status"]["state"] == "TASK_STATE_COMPLETED"
         assert "Hello Worker Two" in data2["task"]["status"]["message"]["parts"][0]["text"]
+
+        # Stop worker_one via /agent/stop
+        r_stop = await client.post("/agent/stop", json={"agent_name": "worker_one"})
+        assert r_stop.status_code == 200
+        stop_data = r_stop.json()
+        assert stop_data["status"] == "stopped"
+        assert stop_data["stopped_agent"] == "worker_one"
+        running_names = [a["agent_name"] for a in stop_data["running_agents"]]
+        assert "worker_one" not in running_names
+        assert "worker_two" in running_names

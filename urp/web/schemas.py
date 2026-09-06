@@ -19,6 +19,9 @@ class InitRequest(BaseModel):
 class SwitchAgentRequest(BaseModel):
     agent_name: str
 
+class StopAgentRequest(BaseModel):
+    agent_name: Optional[str] = None
+
 class CreateAgentRequest(BaseModel):
     agent_name: str
     workspace_path: str = "./agent_workspace"

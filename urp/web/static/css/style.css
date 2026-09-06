@@ -493,6 +493,23 @@ textarea { resize: none; flex: 1; min-height: 70px; }
 .agent-tab-pill .agent-status-mini-dot.busy {
     background: var(--warning);
 }
+.agent-tab-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    margin-left: 0.25rem;
+    border-radius: 50%;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    line-height: 1;
+    transition: all 0.15s ease;
+}
+.agent-tab-close-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--danger);
+}
 .new-agent-tab-btn {
     background: rgba(56, 189, 248, 0.1);
     color: var(--primary);
