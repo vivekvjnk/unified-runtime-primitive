@@ -124,7 +124,7 @@ function addLog(msg, type='event') {
                 logs: [],
             };
         }
-        agentSessions[currentActiveAgent].logs.push(div.cloneNode(true));
+        agentSessions[currentActiveAgent].logs.push(div);
     }
 
     return div;
@@ -162,8 +162,8 @@ function finalizeStreamingCard(fullText) {
         // Update stored clone in active agent's history
         if (currentActiveAgent && agentSessions[currentActiveAgent]) {
             const logs = agentSessions[currentActiveAgent].logs;
-            if (logs.length > 0) {
-                logs[logs.length - 1] = activeStreamCard.cloneNode(true);
+            if (!logs.includes(activeStreamCard)) {
+                logs.push(activeStreamCard);
             }
         }
     } else if (fullText) {
@@ -270,6 +270,14 @@ function addToolCallLog(toolName, argsStr, resultStr, isSubtask=false) {
         consoleDiv.appendChild(activeStreamCard);
     }
     consoleDiv.scrollTop = consoleDiv.scrollHeight;
+
+    // Save tools group snapshot in active agent session if not already stored
+    if (currentActiveAgent && agentSessions[currentActiveAgent]) {
+        const logs = agentSessions[currentActiveAgent].logs;
+        if (!logs.includes(group)) {
+            logs.push(group);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -282,8 +290,14 @@ async function refreshActiveAgents() {
         if (!res.ok) return;
         const data = await res.json();
         
-        currentActiveAgent = data.active_agent_name;
+        // Preserve client-selected currentActiveAgent if it's still running
+        const serverActive = data.active_agent_name;
         runningAgents = data.running_agents || [];
+
+        const isCurrentStillRunning = currentActiveAgent && runningAgents.some(a => a.agent_name === currentActiveAgent);
+        if (!isCurrentStillRunning) {
+            currentActiveAgent = serverActive;
+        }
 
         renderAgentTabs();
         updateActiveAgentBadge();
@@ -404,16 +418,20 @@ async function switchActiveAgent(agentName) {
 
         // Restore or initialize session conversation for switched agent
         consoleDiv.innerHTML = '';
-        if (!agentSessions[agentName]) {
-            agentSessions[agentName] = {
-                contextId: generateId('ctx-'),
-                taskId: generateId('task-'),
-                logs: [],
-            };
+        if (!agentSessions[agentName] || agentSessions[agentName].logs.length === 0) {
+            if (!agentSessions[agentName]) {
+                agentSessions[agentName] = {
+                    contextId: generateId('ctx-'),
+                    taskId: generateId('task-'),
+                    logs: [],
+                };
+            }
             addLog(`Switched focus to agent: ${agentName}`, 'system-info');
         } else {
-            // Restore isolated logs
-            agentSessions[agentName].logs.forEach(l => consoleDiv.appendChild(l.cloneNode(true)));
+            // Restore saved DOM elements
+            agentSessions[agentName].logs.forEach(l => {
+                consoleDiv.appendChild(l);
+            });
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
         }
 

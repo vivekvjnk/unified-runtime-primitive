@@ -389,6 +389,12 @@ class AgentHostingService:
         if conversation_id:
             agent_config["conversation_id"] = conversation_id
 
+        # Persist agent sessions inside the project directory: <workspace_path>/.sessions/<agent_name>
+        # This establishes the project directory as the single unified source of truth.
+        agent_session_dir = os.path.join(self.workspace_path, ".sessions", norm_agent_name)
+        os.makedirs(agent_session_dir, exist_ok=True)
+        agent_config.setdefault("session_dir", agent_session_dir)
+
         context = AgentContext(
             workspace_path=self.workspace_path,
             configuration=agent_config,
