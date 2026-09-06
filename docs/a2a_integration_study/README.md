@@ -13,7 +13,8 @@
 | **Phase 3** | [`03_native_data_structures_and_a2a_alignment.md`](03_native_data_structures_and_a2a_alignment.md) | **Completed** | Deep review of real-world agents (Archy, ANA, Librarian) and proposed native data structure simplifications for A2A alignment. |
 | **Phase 4** | [`04_vhl_agents_migration_guide.md`](04_vhl_agents_migration_guide.md) | **Completed** | Step-by-step migration recipes and diffs for upgrading Archy, ANA, and Librarian agents under VHL-System. |
 | **Phase 5** | [`05_a2a_implementation_roadmap.md`](05_a2a_implementation_roadmap.md) | **Completed** | Phased engineering implementation roadmap and technical specification for the `urp.a2a` adapter layer. |
-| **Phase 6** | [`06_a2a_technical_feasibility_analysis.md`](06_a2a_technical_feasibility_analysis.md) | **Ready for Review** | In-depth technical feasibility study: protocol mapping, HTTP+JSON/REST with SSE, state harmonization, and WebHMI as the primary reference A2A client. |
+| **Phase 6** | [`06_a2a_technical_feasibility_analysis.md`](06_a2a_technical_feasibility_analysis.md) | **Completed** | In-depth technical feasibility study: protocol mapping, HTTP+JSON/REST with SSE, state harmonization, and WebHMI as the primary reference A2A client. |
+| **Phase 7** | [`07_phase7_dynamic_agent_creation_and_multiagent_collaboration.md`](07_phase7_dynamic_agent_creation_and_multiagent_collaboration.md) | **Active Plan** | Multi-agent URP hosting, WebHMI dynamic agent authoring with ECP ingestion, A2A peer dialing, and `tiny-agent` milestone execution. |
 
 ---
 
